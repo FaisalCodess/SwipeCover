@@ -79,7 +79,7 @@ def move(payload: MovePayload) -> dict:
         if game is None:
             raise HTTPException(status_code=404, detail="Game session not found.")
         moved = game.move(payload.direction)
-        return game.snapshot(moved)
+        return {"session_id": payload.session_id, **game.snapshot(moved)}
 
 
 @app.post("/api/game/restart")
@@ -89,7 +89,7 @@ def restart(payload: SessionPayload) -> dict:
         if game is None:
             raise HTTPException(status_code=404, detail="Game session not found.")
         game.restart()
-        return game.snapshot()
+        return {"session_id": payload.session_id, **game.snapshot()}
 
 
 @app.post("/api/game/submit-score")

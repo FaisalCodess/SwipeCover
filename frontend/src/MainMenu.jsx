@@ -7,6 +7,20 @@ const MENU_ITEMS = [
   { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
 ];
 
+function getTimeUntilUtcReset() {
+  const now = new Date();
+  const nextReset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+  return Math.max(0, nextReset - now.getTime());
+}
+
+function formatCountdown(milliseconds) {
+  const totalSeconds = Math.ceil(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((unit) => String(unit).padStart(2, '0')).join(':');
+}
+
 function createMotes(width, height) {
   const amount = Math.min(100, Math.max(38, Math.round(width * height / 15000)));
   return Array.from({ length: amount }, () => ({
@@ -144,17 +158,7 @@ function CrystalRange() {
   );
 }
 
-function Monolith({ className, children }) {
-  return (
-    <div className={`menu-monolith ${className}`} aria-hidden="true">
-      <div className="menu-monolith-face">{children}</div>
-      <div className="menu-monolith-side" />
-      <div className="menu-monolith-top" />
-    </div>
-  );
-}
-
-function MenuAtmosphere() {
+function MenuAtmosphere({ remainingLevels }) {
   const root = useRef(null);
   const animationFrame = useRef(0);
 
@@ -180,8 +184,6 @@ function MenuAtmosphere() {
         target.style.setProperty('--mid-y', `${pendingY * -9}px`);
         target.style.setProperty('--range-x', `${pendingX * -5}px`);
         target.style.setProperty('--range-y', `${pendingY * -2}px`);
-        target.style.setProperty('--booster-x', `${pendingX * 5}px`);
-        target.style.setProperty('--booster-y', `${pendingY * 4}px`);
         animationFrame.current = 0;
       });
     }
@@ -197,8 +199,6 @@ function MenuAtmosphere() {
       target.style.setProperty('--mid-y', '0px');
       target.style.setProperty('--range-x', '0px');
       target.style.setProperty('--range-y', '0px');
-      target.style.setProperty('--booster-x', '0px');
-      target.style.setProperty('--booster-y', '0px');
     }
 
     function handlePointerOut(event) {
@@ -225,10 +225,25 @@ function MenuAtmosphere() {
         <div className="menu-ruin menu-ruin-right" />
       </div>
       <div className="menu-depth menu-depth-mid">
-        <div className="menu-portal"><span /><i /><b /></div>
-        <Monolith className="menu-mono-one"><span /></Monolith>
-        <Monolith className="menu-mono-two"><span /></Monolith>
-        <Monolith className="menu-mono-three"><span /></Monolith>
+        {remainingLevels.length > 0 && (
+          <div
+            className="menu-level-orbits"
+            data-orb-count={remainingLevels.length}
+            aria-hidden="true"
+          >
+            <div className="menu-orbit-backplate" />
+            {remainingLevels.map((level, index) => (
+              <span
+                key={level}
+                data-level-orb={level}
+                className="menu-orb-position"
+                style={{ '--orb-angle': `${index * 360 / remainingLevels.length}deg` }}
+              >
+                <span className="menu-level-orb" />
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       <CrystalRange />
       <div className="menu-vignette" />
@@ -276,8 +291,19 @@ function formatMenuTime(milliseconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 }
 
-export default function MainMenu({ onPlay, onSettings, scores = [], completedLevels = [], serverReady, busy }) {
+export default function MainMenu({ onPlay, onSettings, scores = [], completedLevels = [], serverReady, busy, error }) {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [timeUntilReset, setTimeUntilReset] = useState(getTimeUntilUtcReset);
+  const remainingLevels = [1, 2, 3, 4, 5].filter((level) => !completedLevels.includes(level));
+  const nextLevel = remainingLevels[0] || 1;
+
+  useEffect(() => {
+    if (remainingLevels.length) return undefined;
+    const updateCountdown = () => setTimeUntilReset(getTimeUntilUtcReset());
+    updateCountdown();
+    const timer = window.setInterval(updateCountdown, 1000);
+    return () => window.clearInterval(timer);
+  }, [remainingLevels.length]);
 
   useEffect(() => {
     if (!showLeaderboard) return undefined;
@@ -289,29 +315,27 @@ export default function MainMenu({ onPlay, onSettings, scores = [], completedLev
   }, [showLeaderboard]);
 
   function handleAction(action) {
-    if (action === 'play') onPlay();
+    if (action === 'play') void onPlay(nextLevel);
     if (action === 'settings') onSettings();
     if (action === 'leaderboard') setShowLeaderboard(true);
   }
 
   return (
     <section className="duel-menu" aria-label="Swipe Cover main menu">
-      <MenuAtmosphere />
+      <MenuAtmosphere remainingLevels={remainingLevels} />
       <div className="menu-grain" aria-hidden="true" />
 
       <header className="menu-brand">
-        <span className="menu-brand-mark" aria-hidden="true"><i /><b /></span>
-        <span className="menu-brand-name">SWIPE<span> / </span>COVER</span>
-        <span className="menu-brand-subtitle">THE DAILY PUZZLE RUN</span>
+        <span className="menu-brand-orb" aria-hidden="true"><i /></span>
+        <span className="menu-brand-name">SWIPE COVER</span>
       </header>
 
       <div className="menu-layout">
         <section className="menu-navigation" aria-label="Main menu">
           <div className="menu-orbit menu-orbit-one" aria-hidden="true" />
           <div className="menu-orbit menu-orbit-two" aria-hidden="true" />
-          <div className="menu-nav-heading"><span>01</span> THE JOURNEY</div>
           <nav>
-            {MENU_ITEMS.map(({ id, label, icon: Icon }, index) => (
+            {MENU_ITEMS.filter(({ id }) => id !== 'play' || remainingLevels.length > 0).map(({ id, label, icon: Icon }) => (
               <button
                 type="button"
                 key={id}
@@ -321,26 +345,20 @@ export default function MainMenu({ onPlay, onSettings, scores = [], completedLev
                 aria-disabled={id === 'play' && (!serverReady || busy)}
                 aria-label={label}
               >
-                <span className="menu-nav-number">0{index + 1}</span>
                 <span className="menu-nav-icon"><Icon size={17} strokeWidth={1.35} /></span>
                 <span className="menu-nav-label">{label}</span>
                 <ArrowUpRight className="menu-nav-arrow" size={16} strokeWidth={1.5} />
               </button>
             ))}
           </nav>
-          <p className="menu-nav-caption">
-            <span />
-            {serverReady ? 'A NEW PUZZLE, EVERY DAY' : busy ? 'PREPARING YOUR PUZZLE' : 'CONNECTING TO THE GAME SERVER'}
-          </p>
+          {remainingLevels.length === 0 && (
+            <p className="menu-countdown">
+              <span>DAILY RUN COMPLETE</span>
+              <strong>Come back after {formatCountdown(timeUntilReset)}</strong>
+            </p>
+          )}
+          {error && <p className="menu-error" role="alert">{error}</p>}
         </section>
-
-        <div className="menu-booster" role="img" aria-label="0 booster packs">
-          <span className="menu-booster-caption">YOUR COLLECTION</span>
-          <span className="menu-booster-halo"><span className="menu-booster-core"><i /><b /></span></span>
-          <span className="menu-booster-count">0</span>
-          <span className="menu-booster-label">BOOSTER PACKS</span>
-          <span className="menu-booster-foot">A little mystery awaits</span>
-        </div>
       </div>
 
       <div className="menu-footer">

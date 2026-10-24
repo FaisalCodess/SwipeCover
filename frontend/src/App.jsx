@@ -250,19 +250,23 @@ function GameBoard({ game, onMove, busy, theme }) {
       onPointerCancel={() => { touchStart.current = null; }}
       aria-label="Swipe the board or use the direction buttons to cover every dot"
     >
-      <div className="grid aspect-[12/9] grid-cols-12 gap-1 sm:gap-1.5">
+      <div className="grid aspect-[12/9] grid-cols-12 gap-1 sm:gap-1.5" role="grid" aria-label="Game board">
         {game.board.flatMap((row, rowIndex) => row.map((cell, columnIndex) => {
           const isPlayer = player.x === rowIndex && player.y === columnIndex;
           const isWall = cell === '|';
           return (
             <div
               key={`${rowIndex}-${columnIndex}`}
+              role="gridcell"
+              aria-label={isWall ? `Wall at row ${rowIndex + 1}, column ${columnIndex + 1}` : undefined}
+              data-cell-type={isWall ? 'wall' : cell}
               className={`relative grid min-h-0 min-w-0 place-items-center overflow-hidden rounded-[5px] transition-colors duration-300 sm:rounded-[9px] ${
                 isWall
-                  ? (theme === 'light' ? 'border border-emerald-950/10 bg-gradient-to-br from-[#32936b] via-[#54c991] to-[#237354]' : 'border border-white/10 bg-gradient-to-br from-[#40594f] via-[#a0e3c0] to-[#526c60]')
+                  ? `board-wall-cell ${theme === 'light' ? 'board-wall-cell-light' : ''}`
                   : (theme === 'light' ? 'bg-emerald-950/[0.035]' : 'bg-white/[0.035]')
               }`}
             >
+              {isWall && <span className="board-wall-face" aria-hidden="true" />}
               {!isWall && cell === '.' && (
                 <span className={`h-[27%] w-[27%] rounded-full ${theme === 'light' ? 'bg-emerald-600/65' : 'bg-mint/70 shadow-[0_0_12px_rgba(124,232,185,0.25)]'}`} />
               )}
@@ -295,7 +299,11 @@ function DirectionPad({ onMove, disabled }) {
           key={id}
           type="button"
           disabled={disabled}
-          onClick={() => onMove(id)}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onMove(id);
+          }}
           aria-label={`Move ${label.toLowerCase()}`}
           className={`grid h-12 w-full place-items-center rounded-xl border border-white/10 bg-white/[0.035] text-slate-300 transition hover:border-mint/40 hover:bg-mint/10 hover:text-mint active:scale-95 disabled:opacity-40 sm:h-14 ${
             id === 'up' ? 'col-start-2 row-start-1' :
@@ -314,22 +322,38 @@ export default function App() {
   const initial = useRef(readSavedState());
   const [settings, setSettings] = useState(initial.current.settings);
   const [leaderboard, setLeaderboard] = useState(initial.current.leaderboard);
+  const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0, 10));
   const [screen, setScreen] = useState('home');
   const [game, setGame] = useState(null);
   const [timeMs, setTimeMs] = useState(0);
   const [running, setRunning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [moveFeedback, setMoveFeedback] = useState('');
   const [error, setError] = useState('');
   const [serverReady, setServerReady] = useState(false);
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const requestLock = useRef(false);
+  const gameRef = useRef(game);
+  const runningRef = useRef(running);
+  const screenRef = useRef(screen);
+  const showSettingsRef = useRef(showSettings);
+  const moveQueueRef = useRef([]);
+  const moveQueueProcessingRef = useRef(false);
+  const moveRequestRef = useRef(null);
+  const moveInputRef = useRef(null);
+  const restartLevelRef = useRef(null);
   const audioRef = useRef(null);
   const startTime = useRef(0);
+  const timeRef = useRef(timeMs);
   const settingsRef = useRef(settings);
+  gameRef.current = game;
+  runningRef.current = running;
+  screenRef.current = screen;
+  showSettingsRef.current = showSettings;
+  timeRef.current = timeMs;
   settingsRef.current = settings;
 
-  const dayKey = new Date().toISOString().slice(0, 10);
   const dailyScores = leaderboard[dayKey]?.totals || [];
   const completedLevels = Object.entries(leaderboard[dayKey]?.levels || {})
     .filter(([, scores]) => scores.length > 0)
@@ -343,6 +367,21 @@ export default function App() {
       setError('Your browser could not save game settings. Check available storage.');
     }
   }, [settings, leaderboard]);
+
+  useEffect(() => {
+    let timer;
+    function scheduleDailyReset() {
+      const now = new Date();
+      const nextReset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+      const delay = Math.max(1, nextReset - now.getTime() + 25);
+      timer = window.setTimeout(() => {
+        setDayKey(new Date().toISOString().slice(0, 10));
+        scheduleDailyReset();
+      }, delay);
+    }
+    scheduleDailyReset();
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -361,7 +400,11 @@ export default function App() {
 
   useEffect(() => {
     if (!running) return undefined;
-    const timer = window.setInterval(() => setTimeMs(performance.now() - startTime.current), 30);
+    const timer = window.setInterval(() => {
+      const elapsed = performance.now() - startTime.current;
+      timeRef.current = elapsed;
+      setTimeMs(elapsed);
+    }, 30);
     return () => window.clearInterval(timer);
   }, [running]);
 
@@ -445,20 +488,28 @@ export default function App() {
 
   const startLevel = useCallback(async (level) => {
     setAudioUnlocked(true);
-    if (requestLock.current) return;
+    if (requestLock.current) return false;
     requestLock.current = true;
     setBusy(true);
     setError('');
     try {
       const newGame = await requestGame('/game/new', { level });
       setGame(newGame);
+      gameRef.current = newGame;
       setTimeMs(0);
+      timeRef.current = 0;
+      setMoveFeedback('');
       startTime.current = performance.now();
       setRunning(true);
+      runningRef.current = true;
+      moveQueueRef.current = [];
       setScreen('game');
+      screenRef.current = 'game';
+      return true;
     } catch (requestError) {
       console.error('Could not start a new game.', requestError);
       setError(requestError.message);
+      return false;
     } finally {
       requestLock.current = false;
       setBusy(false);
@@ -466,16 +517,23 @@ export default function App() {
   }, []);
 
   const restartLevel = useCallback(async () => {
-    if (!game?.session_id || requestLock.current) return;
+    const activeGame = gameRef.current;
+    if (!activeGame?.session_id || requestLock.current) return;
     requestLock.current = true;
     setBusy(true);
     setError('');
     try {
-      const restarted = await requestGame('/game/restart', { session_id: game.session_id });
-      setGame(restarted);
-      startTime.current = performance.now() - timeMs;
+      const restarted = await requestGame('/game/restart', { session_id: activeGame.session_id });
+      const updatedGame = { ...restarted, session_id: restarted.session_id ?? activeGame.session_id };
+      setGame(updatedGame);
+      gameRef.current = updatedGame;
+      setMoveFeedback('');
+      startTime.current = performance.now() - timeRef.current;
       setRunning(true);
+      runningRef.current = true;
+      moveQueueRef.current = [];
       setScreen('game');
+      screenRef.current = 'game';
     } catch (requestError) {
       console.error('Could not restart the level.', requestError);
       setError(requestError.message);
@@ -483,23 +541,30 @@ export default function App() {
       requestLock.current = false;
       setBusy(false);
     }
-  }, [game, timeMs]);
+  }, []);
 
-  const move = useCallback(async (direction) => {
-    if (!game?.session_id || !running || requestLock.current) return;
+  const moveRequest = useCallback(async (direction) => {
+    const activeGame = gameRef.current;
+    if (!activeGame?.session_id || !runningRef.current || requestLock.current) return;
     requestLock.current = true;
     setBusy(true);
     setError('');
-    const completedAt = timeMs;
+    const completedAt = timeRef.current;
     try {
-      const result = await requestGame('/game/move', { session_id: game.session_id, direction });
-      setGame(result);
-      if (result.moved) playTone(340, 0.09, 'triangle');
-      if (result.won) {
+      const result = await requestGame('/game/move', { session_id: activeGame.session_id, direction });
+      const updatedGame = { ...result, session_id: result.session_id ?? activeGame.session_id };
+      setGame(updatedGame);
+      gameRef.current = updatedGame;
+      setMoveFeedback(updatedGame.moved ? '' : 'Blocked by a wall or the edge.');
+      if (updatedGame.moved) playTone(340, 0.09, 'triangle');
+      if (updatedGame.won) {
         setRunning(false);
+        runningRef.current = false;
         setScreen('win');
+        screenRef.current = 'win';
         setTimeMs(completedAt);
-        saveScore(result, completedAt);
+        timeRef.current = completedAt;
+        saveScore(updatedGame, completedAt);
         playTone(660, 0.2);
       }
     } catch (requestError) {
@@ -509,34 +574,67 @@ export default function App() {
       requestLock.current = false;
       setBusy(false);
     }
-  }, [game, playTone, running, saveScore, timeMs]);
+  }, [playTone, saveScore]);
+
+  moveRequestRef.current = moveRequest;
+
+  const processMoveQueue = useCallback(async () => {
+    if (moveQueueProcessingRef.current) return;
+    moveQueueProcessingRef.current = true;
+    try {
+      while (moveQueueRef.current.length > 0 && runningRef.current) {
+        const direction = moveQueueRef.current.shift();
+        await moveRequestRef.current?.(direction);
+      }
+    } finally {
+      moveQueueProcessingRef.current = false;
+    }
+  }, []);
+
+  const enqueueMove = useCallback((direction) => {
+    if (!gameRef.current?.session_id || !runningRef.current) return;
+    moveQueueRef.current.push(direction);
+    void processMoveQueue();
+  }, [processMoveQueue]);
+  moveInputRef.current = enqueueMove;
+  restartLevelRef.current = restartLevel;
 
   useEffect(() => {
     function handleKeyDown(event) {
-      if (showSettings) {
+      if (showSettingsRef.current) {
         if (event.key === 'Escape') setShowSettings(false);
         return;
       }
-      if (screen !== 'game' || !running || event.repeat) return;
+      if (screenRef.current !== 'game' || !runningRef.current || event.repeat) return;
       const key = event.key.toLowerCase();
-      const direction = Object.entries(settings.keybinds).find(([, binding]) => binding.toLowerCase() === key);
+      const direction = Object.entries(settingsRef.current.keybinds).find(([, binding]) => binding.toLowerCase() === key);
       const arrow = DIRECTIONS.find(({ key: arrowKey }) => arrowKey.toLowerCase() === key);
       if (direction || arrow) {
         event.preventDefault();
-        void move(direction?.[0] || arrow.id);
+        event.stopPropagation();
+        moveInputRef.current?.(direction?.[0] || arrow.id);
       } else if (key === 'r') {
         event.preventDefault();
-        void restartLevel();
+        event.stopPropagation();
+        restartLevelRef.current?.();
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [move, restartLevel, running, screen, settings.keybinds, showSettings]);
+  }, []);
 
   function changeSettings(nextSettings) {
     setSettings(nextSettings);
     settingsRef.current = nextSettings;
     setAudioUnlocked(true);
+  }
+
+  function returnHome() {
+    setScreen('home');
+    screenRef.current = 'home';
+    setRunning(false);
+    runningRef.current = false;
+    moveQueueRef.current = [];
   }
 
   const light = settings.theme === 'light';
@@ -546,11 +644,11 @@ export default function App() {
       <div className={screen === 'home' ? '' : 'mx-auto w-full max-w-6xl'}>
         {screen !== 'home' && (
           <header className="flex items-center justify-between">
-            <button type="button" className="rounded-xl text-left" onClick={() => setScreen('home')} aria-label="Back to home">
+            <button type="button" className="rounded-xl text-left" onClick={returnHome} aria-label="Back to home">
               <Brand compact />
             </button>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setScreen('home')} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">
+              <button type="button" onClick={returnHome} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white">
                 <ChevronLeft size={16} /><span className="hidden sm:inline">Menu</span>
               </button>
               <IconButton label="Open settings" onClick={() => setShowSettings(true)}><Settings2 size={18} /></IconButton>
@@ -567,12 +665,13 @@ export default function App() {
 
         {screen === 'home' && (
           <MainMenu
-            onPlay={() => startLevel(1)}
+            onPlay={startLevel}
             onSettings={() => setShowSettings(true)}
             scores={dailyScores}
             completedLevels={completedLevels}
             serverReady={serverReady}
             busy={busy}
+            error={error}
           />
         )}
 
@@ -591,14 +690,17 @@ export default function App() {
 
             <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_230px]">
               <Panel className="overflow-hidden p-2.5 sm:p-5">
-                <div className="mb-3 flex items-center justify-between px-1 sm:mb-4 sm:px-2">
-                  <div className="flex items-center gap-2 text-xs font-medium text-slate-400"><span className="h-2 w-2 rounded-full bg-mint" /> {game.remaining} dots remaining</div>
+                <div className="mb-3 flex items-center justify-between gap-2 px-1 sm:mb-4 sm:px-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-slate-400">
+                    <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-mint" /> {game.remaining} dots remaining</span>
+                    {moveFeedback && <span role="status" aria-live="polite" className="text-amber-300">{moveFeedback}</span>}
+                  </div>
                   <div className="flex gap-1.5">
                     <span className="h-1.5 w-5 rounded-full bg-mint" />
                     {Array.from({ length: LEVELS - 1 }, (_, index) => <span key={index} className="h-1.5 w-5 rounded-full bg-white/10" />)}
                   </div>
                 </div>
-                <GameBoard game={game} onMove={move} busy={busy} theme={settings.theme} />
+                <GameBoard game={game} onMove={enqueueMove} busy={busy} theme={settings.theme} />
                 <div className="mt-4 flex items-center justify-between px-1 sm:px-2">
                   <p className="muted hidden items-center gap-2 text-xs text-slate-500 sm:flex"><Keyboard size={14} /> Use WASD or arrow keys</p>
                   <div className="ml-auto flex items-center gap-2">
@@ -618,7 +720,7 @@ export default function App() {
                     <div><p className="text-xs font-bold uppercase tracking-wider text-slate-500">Movement</p><p className="mt-1 text-sm font-semibold">Pick a direction</p></div>
                     <Gamepad2 size={19} className="text-mint" />
                   </div>
-                  <div className="mt-4 max-w-[220px]"><DirectionPad onMove={move} disabled={busy || !running} /></div>
+                  <div className="mt-4 max-w-[220px]"><DirectionPad onMove={enqueueMove} disabled={!running} /></div>
                   <p className="muted mt-3 text-center text-[11px] text-slate-500">Or swipe across the board</p>
                 </Panel>
                 <Panel className="p-4 sm:p-5">

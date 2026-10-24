@@ -48,6 +48,37 @@ input:focus-visible {
   touch-action: none;
 }
 
+.board-wall-cell {
+  border: 1px solid rgba(255, 255, 255, 0.19);
+  background: linear-gradient(145deg, #252d36, #141a21);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 3px rgba(0, 0, 0, 0.42);
+}
+
+.board-wall-face {
+  position: absolute;
+  inset: 13%;
+  border: 1px solid rgba(225, 233, 239, 0.22);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(10, 15, 20, 0.7) 49% 52%, transparent 52%),
+    linear-gradient(0deg, transparent 48%, rgba(10, 15, 20, 0.72) 48% 52%, transparent 52%),
+    linear-gradient(145deg, #87929d 0%, #535d68 48%, #38414b 100%);
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.25), 0 0 8px rgba(9, 14, 19, 0.5);
+}
+
+.board-wall-cell-light {
+  border-color: rgba(12, 23, 19, 0.35);
+  background: linear-gradient(145deg, #46534f, #1e2925);
+}
+
+.board-wall-cell-light .board-wall-face {
+  border-color: rgba(255, 255, 255, 0.3);
+  background:
+    linear-gradient(90deg, transparent 49%, rgba(13, 25, 20, 0.78) 49% 52%, transparent 52%),
+    linear-gradient(0deg, transparent 48%, rgba(13, 25, 20, 0.78) 48% 52%, transparent 52%),
+    linear-gradient(145deg, #9ca7a1 0%, #68756f 48%, #46534d 100%);
+}
+
 .light-theme {
   color: #17241f;
   background:
