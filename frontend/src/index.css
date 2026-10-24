@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: 'DM Sans', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #edf4f0;
+  background: #0b0f14;
+  font-optical-sizing: auto;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(ellipse at 50% -30%, rgba(62, 101, 88, 0.19), transparent 65%),
+    #0b0f14;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid #7ce8b9;
+  outline-offset: 3px;
+}
+
+::selection {
+  color: #0b0f14;
+  background: #7ce8b9;
+}
+
+.board-touch {
+  touch-action: none;
+}
+
+.light-theme {
+  color: #17241f;
+  background:
+    radial-gradient(ellipse at 50% -30%, rgba(117, 204, 166, 0.23), transparent 65%),
+    #edf3ef;
+}
+
+.light-theme .panel {
+  border-color: rgba(24, 45, 36, 0.1);
+  background-color: rgba(255, 255, 255, 0.78);
+  color: #17241f;
+}
+
+.light-theme .muted {
+  color: #62736b;
+}
+
+.light-theme .board-surface {
+  background-color: rgba(21, 42, 32, 0.035);
+}
