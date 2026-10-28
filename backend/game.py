@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 ROWS = 9
 COLS = 12
-LEVELS_PER_DAY = 5
+LEVELS_PER_DAY = 3
 SOLVABILITY_RUNS = 8
 SOLVABILITY_MAX_MOVES = 150
 DIRECTIONS = {

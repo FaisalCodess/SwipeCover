@@ -57,7 +57,7 @@ def health() -> dict:
 def game_summary() -> dict:
     return {
         "title": "Swipe Cover",
-        "levels": 5,
+        "levels": 3,
         "themes": ["dark", "light"],
         "status": "ready",
     }

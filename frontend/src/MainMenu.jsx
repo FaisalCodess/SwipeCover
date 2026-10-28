@@ -1,17 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, Crown, Gamepad2, Settings2, Trophy, X } from 'lucide-react';
+import { ArrowUpRight, Crown, Gamepad2, LockKeyhole, Settings2, Trophy, X } from 'lucide-react';
+import { getTimeUntilAmmanReset } from './dailyReset.js';
 
 const MENU_ITEMS = [
   { id: 'play', label: 'PLAY', icon: Gamepad2 },
   { id: 'settings', label: 'SETTINGS', icon: Settings2 },
   { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
 ];
-
-function getTimeUntilUtcReset() {
-  const now = new Date();
-  const nextReset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-  return Math.max(0, nextReset - now.getTime());
-}
 
 function formatCountdown(milliseconds) {
   const totalSeconds = Math.ceil(milliseconds / 1000);
@@ -252,7 +247,87 @@ function MenuAtmosphere({ remainingLevels }) {
   );
 }
 
-function LeaderboardDialog({ scores, onClose }) {
+function SettingsPanel({ settings, onSettingsChange, onClose, closing }) {
+  const keyControls = [
+    ['up', 'W'],
+    ['left', 'A'],
+    ['down', 'S'],
+    ['right', 'D'],
+    ['restart', 'SPACE'],
+  ];
+
+  function Toggle({ label, checked, onChange }) {
+    return (
+      <button
+        type="button"
+        role="switch"
+        aria-label={label}
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`menu-settings-toggle ${checked ? 'is-on' : ''}`}
+      >
+        <span aria-hidden="true" />
+      </button>
+    );
+  }
+
+  return (
+    <aside
+      className={`menu-settings-panel ${closing ? 'is-closing' : ''}`}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="menu-settings-title"
+    >
+      <div className="menu-settings-connector" aria-hidden="true" />
+      <header className="menu-settings-header">
+        <h2 id="menu-settings-title">SETTINGS</h2>
+        <button type="button" className="menu-settings-close" onClick={onClose} aria-label="Close settings"><X size={16} /></button>
+      </header>
+
+      <div className="menu-settings-row">
+        <span>MUSIC</span>
+        <Toggle label="Toggle music" checked={settings.music} onChange={(music) => onSettingsChange({ ...settings, music })} />
+      </div>
+      <div className="menu-settings-row">
+        <span>SOUND EFFECTS</span>
+        <Toggle label="Toggle sound effects" checked={settings.sfx} onChange={(sfx) => onSettingsChange({ ...settings, sfx })} />
+      </div>
+
+      <label className="menu-settings-volume">
+        <span><span>VOLUME</span><output>{settings.volume}%</output></span>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={settings.volume}
+          style={{ '--range-progress': `${settings.volume}%` }}
+          onChange={(event) => onSettingsChange({ ...settings, volume: Number(event.target.value) })}
+          aria-label="Volume"
+        />
+      </label>
+
+      <div className="menu-keyboard-settings">
+        <span>KEYBOARD CONTROLS</span>
+        <div>
+          {keyControls.map(([binding, fallback]) => {
+            const key = binding === 'restart' ? ' ' : settings.keybinds[binding];
+            const label = key === ' ' ? fallback : String(key || fallback).toUpperCase();
+            return <kbd key={binding} title={binding === 'restart' ? 'Restart' : binding}>{label}</kbd>;
+          })}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function LeaderboardDialog({ levelScores, onClose }) {
+  const [activeLevel, setActiveLevel] = useState(1);
+  const scores = levelScores?.[String(activeLevel)] || [];
+  const sortedScores = [...scores]
+    .filter((entry) => Number.isFinite(entry?.time) && entry.time >= 0)
+    .sort((left, right) => left.time - right.time)
+    .slice(0, 5);
+
   return (
     <div className="menu-dialog-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
@@ -261,21 +336,39 @@ function LeaderboardDialog({ scores, onClose }) {
         <button type="button" className="menu-dialog-close" onClick={onClose} aria-label="Close leaderboard"><X size={18} /></button>
         <span className="menu-dialog-kicker">TODAY'S RUN</span>
         <h2 id="leaderboard-title">Leaderboard</h2>
-        {scores.length ? (
-          <ol className="menu-score-list">
-            {scores.slice(0, 5).map((entry, index) => (
-              <li key={`${entry.name}-${entry.total}-${index}`}>
-                <span className="menu-score-rank">{String(index + 1).padStart(2, '0')}</span>
-                <span className="menu-score-name">{entry.name}</span>
-                <span className="menu-score-time">{formatMenuTime(entry.total)}</span>
-              </li>
-            ))}
+        <div className="menu-leaderboard-tabs" role="tablist" aria-label="Leaderboard level">
+          {[1, 2, 3].map((level) => (
+            <button
+              type="button"
+              key={level}
+              role="tab"
+              aria-selected={activeLevel === level}
+              aria-controls={`leaderboard-level-${level}`}
+              className={activeLevel === level ? 'is-active' : ''}
+              onClick={() => setActiveLevel(level)}
+            >
+              Level {level}
+            </button>
+          ))}
+        </div>
+        {sortedScores.length ? (
+          <ol className="menu-score-list" id={`leaderboard-level-${activeLevel}`} role="tabpanel">
+            {sortedScores.map((entry, index) => {
+              const isLocalPlayer = entry.name === 'You';
+              return (
+                <li key={`${entry.name}-${entry.time}-${index}`} className={isLocalPlayer ? 'is-local-player' : ''}>
+                  <span className="menu-score-rank">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="menu-score-name">{entry.name}{isLocalPlayer && <small>BEST RUN</small>}</span>
+                  <span className="menu-score-time">{formatMenuTime(entry.time)}</span>
+                </li>
+              );
+            })}
           </ol>
         ) : (
-          <div className="menu-leaderboard-empty">
+          <div className="menu-leaderboard-empty" id={`leaderboard-level-${activeLevel}`} role="tabpanel">
             <Crown size={25} />
-            <p>No scores yet today.</p>
-            <span>Finish a level and your best time will appear here.</span>
+            <p>No scores yet for Level {activeLevel}.</p>
+            <span>Finish this level and your best time will appear here.</span>
           </div>
         )}
       </section>
@@ -284,44 +377,67 @@ function LeaderboardDialog({ scores, onClose }) {
 }
 
 function formatMenuTime(milliseconds) {
-  const total = Math.max(0, Math.floor(milliseconds));
-  const minutes = Math.floor(total / 60000);
-  const seconds = Math.floor((total % 60000) / 1000);
-  const centiseconds = Math.floor((total % 1000) / 10);
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return '--:--:--';
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((unit) => String(unit).padStart(2, '0')).join(':');
 }
 
-export default function MainMenu({ onPlay, onSettings, scores = [], completedLevels = [], serverReady, busy, error }) {
+export default function MainMenu({ onPlay, settings, onSettingsChange, levelScores = {}, completedLevels = [], serverReady, busy, error }) {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [timeUntilReset, setTimeUntilReset] = useState(getTimeUntilUtcReset);
-  const remainingLevels = [1, 2, 3, 4, 5].filter((level) => !completedLevels.includes(level));
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsClosing, setSettingsClosing] = useState(false);
+  const settingsCloseTimer = useRef(null);
+  const [timeUntilReset, setTimeUntilReset] = useState(getTimeUntilAmmanReset);
+  const remainingLevels = [1, 2, 3].filter((level) => !completedLevels.includes(level));
   const nextLevel = remainingLevels[0] || 1;
 
   useEffect(() => {
     if (remainingLevels.length) return undefined;
-    const updateCountdown = () => setTimeUntilReset(getTimeUntilUtcReset());
+    const updateCountdown = () => setTimeUntilReset(getTimeUntilAmmanReset());
     updateCountdown();
     const timer = window.setInterval(updateCountdown, 1000);
     return () => window.clearInterval(timer);
   }, [remainingLevels.length]);
 
   useEffect(() => {
-    if (!showLeaderboard) return undefined;
+    if (!showLeaderboard && !showSettings) return undefined;
     function onKeyDown(event) {
-      if (event.key === 'Escape') setShowLeaderboard(false);
+      if (event.key !== 'Escape') return;
+      if (showSettings) closeSettings();
+      else setShowLeaderboard(false);
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showLeaderboard]);
+  }, [showLeaderboard, showSettings, settingsClosing]);
+
+  useEffect(() => () => window.clearTimeout(settingsCloseTimer.current), []);
+
+  function openSettings() {
+    window.clearTimeout(settingsCloseTimer.current);
+    setSettingsClosing(false);
+    setShowSettings(true);
+  }
+
+  function closeSettings() {
+    if (settingsClosing) return;
+    setSettingsClosing(true);
+    settingsCloseTimer.current = window.setTimeout(() => {
+      setShowSettings(false);
+      setSettingsClosing(false);
+    }, 240);
+  }
 
   function handleAction(action) {
     if (action === 'play') void onPlay(nextLevel);
-    if (action === 'settings') onSettings();
+    if (action === 'settings') openSettings();
     if (action === 'leaderboard') setShowLeaderboard(true);
   }
 
   return (
-    <section className="duel-menu" aria-label="Swipe Cover main menu">
+    <section className={`duel-menu ${showSettings ? 'has-settings-open' : ''}`} aria-label="Swipe Cover main menu">
       <MenuAtmosphere remainingLevels={remainingLevels} />
       <div className="menu-grain" aria-hidden="true" />
 
@@ -335,39 +451,47 @@ export default function MainMenu({ onPlay, onSettings, scores = [], completedLev
           <div className="menu-orbit menu-orbit-one" aria-hidden="true" />
           <div className="menu-orbit menu-orbit-two" aria-hidden="true" />
           <nav>
-            {MENU_ITEMS.filter(({ id }) => id !== 'play' || remainingLevels.length > 0).map(({ id, label, icon: Icon }) => (
+            {MENU_ITEMS.map(({ id, label, icon: Icon }) => (
               <button
                 type="button"
                 key={id}
                 onClick={() => handleAction(id)}
-                className={`menu-nav-item ${id === 'play' ? 'is-primary' : ''}`}
-                disabled={id === 'play' && (!serverReady || busy)}
-                aria-disabled={id === 'play' && (!serverReady || busy)}
-                aria-label={label}
+                className={`menu-nav-item ${id === 'play' && remainingLevels.length > 0 ? 'is-primary' : ''} ${id === 'play' && remainingLevels.length === 0 ? 'is-locked' : ''} ${id === 'settings' && showSettings ? 'is-selected' : ''}`}
+                disabled={id === 'play' && (remainingLevels.length === 0 || !serverReady || busy)}
+                aria-disabled={id === 'play' && (remainingLevels.length === 0 || !serverReady || busy)}
+                aria-label={id === 'play' && remainingLevels.length === 0 ? 'Locked until daily games reset' : label}
               >
-                <span className="menu-nav-icon"><Icon size={17} strokeWidth={1.35} /></span>
-                <span className="menu-nav-label">{label}</span>
-                <ArrowUpRight className="menu-nav-arrow" size={16} strokeWidth={1.5} />
+                <span className="menu-nav-icon">{id === 'play' && remainingLevels.length === 0 ? <LockKeyhole size={17} strokeWidth={1.35} /> : <Icon size={17} strokeWidth={1.35} />}</span>
+                <span className="menu-nav-label">{id === 'play' && remainingLevels.length === 0 ? 'LOCKED' : label}</span>
+                {!(id === 'play' && remainingLevels.length === 0) && <ArrowUpRight className="menu-nav-arrow" size={16} strokeWidth={1.5} />}
               </button>
             ))}
           </nav>
           {remainingLevels.length === 0 && (
             <p className="menu-countdown">
-              <span>DAILY RUN COMPLETE</span>
-              <strong>Come back after {formatCountdown(timeUntilReset)}</strong>
+              <span>COME BACK IN</span>
+              <strong>{formatCountdown(timeUntilReset)}</strong>
             </p>
           )}
           {error && <p className="menu-error" role="alert">{error}</p>}
         </section>
+        {showSettings && (
+          <SettingsPanel
+            settings={settings}
+            onSettingsChange={onSettingsChange}
+            onClose={closeSettings}
+            closing={settingsClosing}
+          />
+        )}
       </div>
 
       <div className="menu-footer">
-        <span><i /> {completedLevels.length} / 5 LEVELS CLEARED TODAY</span>
+        <span><i /> {completedLevels.length} / 3 GAMES CLEARED TODAY</span>
         <span className="menu-footer-divider" />
         <span>MOVE WITH INTENTION</span>
       </div>
 
-      {showLeaderboard && <LeaderboardDialog scores={scores} onClose={() => setShowLeaderboard(false)} />}
+      {showLeaderboard && <LeaderboardDialog levelScores={levelScores} onClose={() => setShowLeaderboard(false)} />}
     </section>
   );
 }

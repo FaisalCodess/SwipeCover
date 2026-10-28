@@ -22,10 +22,11 @@ import {
 } from 'lucide-react';
 import MainMenu from './MainMenu.jsx';
 import './main-menu.css';
+import { getAmmanDayKey, getAmmanNextMidnight } from './dailyReset.js';
 
 const API_URL = import.meta.env.VITE_GAME_API_URL || 'http://127.0.0.1:8000/api';
 const STORAGE_KEY = 'swipe-cover-save-v2';
-const LEVELS = 5;
+const LEVELS = 3;
 const MUSIC_NOTES = [220, 247, 277, 330, 392, 330, 277, 247, 220, 196, 174, 196];
 const DIRECTIONS = [
   { id: 'up', label: 'Up', icon: ArrowUp, key: 'ArrowUp' },
@@ -38,7 +39,7 @@ const DEFAULT_SETTINGS = {
   music: true,
   sfx: true,
   volume: 65,
-  keybinds: { up: 'w', left: 'a', down: 's', right: 'd' },
+  keybinds: { up: 'w', left: 'a', down: 's', right: 'd', restart: ' ' },
 };
 
 function readSavedState() {
@@ -322,7 +323,7 @@ export default function App() {
   const initial = useRef(readSavedState());
   const [settings, setSettings] = useState(initial.current.settings);
   const [leaderboard, setLeaderboard] = useState(initial.current.leaderboard);
-  const [dayKey, setDayKey] = useState(() => new Date().toISOString().slice(0, 10));
+  const [dayKey, setDayKey] = useState(() => getAmmanDayKey());
   const [screen, setScreen] = useState('home');
   const [game, setGame] = useState(null);
   const [timeMs, setTimeMs] = useState(0);
@@ -354,9 +355,9 @@ export default function App() {
   timeRef.current = timeMs;
   settingsRef.current = settings;
 
-  const dailyScores = leaderboard[dayKey]?.totals || [];
-  const completedLevels = Object.entries(leaderboard[dayKey]?.levels || {})
-    .filter(([, scores]) => scores.length > 0)
+  const dailyLevelScores = leaderboard[dayKey]?.levels || {};
+  const completedLevels = Object.entries(dailyLevelScores)
+    .filter(([level, scores]) => Number(level) <= LEVELS && scores.length > 0)
     .map(([level]) => Number(level));
 
   useEffect(() => {
@@ -372,10 +373,9 @@ export default function App() {
     let timer;
     function scheduleDailyReset() {
       const now = new Date();
-      const nextReset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-      const delay = Math.max(1, nextReset - now.getTime() + 25);
+      const delay = Math.max(1, getAmmanNextMidnight(now) - now.getTime() + 25);
       timer = window.setTimeout(() => {
-        setDayKey(new Date().toISOString().slice(0, 10));
+        setDayKey(getAmmanDayKey());
         scheduleDailyReset();
       }, delay);
     }
@@ -470,7 +470,7 @@ export default function App() {
   }, []);
 
   const saveScore = useCallback((completedGame, elapsed) => {
-    const day = new Date().toISOString().slice(0, 10);
+    const day = getAmmanDayKey();
     setLeaderboard((previous) => {
       const levels = { ...(previous[day]?.levels || {}) };
       const levelScores = [...(levels[String(completedGame.level)] || []), { name: 'You', time: elapsed }]
@@ -481,7 +481,7 @@ export default function App() {
         .map((scores) => scores[0])
         .filter(Boolean)
         .sort((left, right) => left.time - right.time)
-        .slice(0, 5);
+        .slice(0, 3);
       return { ...previous, [day]: { levels, totals } };
     });
   }, []);
@@ -613,7 +613,7 @@ export default function App() {
         event.preventDefault();
         event.stopPropagation();
         moveInputRef.current?.(direction?.[0] || arrow.id);
-      } else if (key === 'r') {
+      } else if (key === settingsRef.current.keybinds.restart.toLowerCase()) {
         event.preventDefault();
         event.stopPropagation();
         restartLevelRef.current?.();
@@ -666,8 +666,9 @@ export default function App() {
         {screen === 'home' && (
           <MainMenu
             onPlay={startLevel}
-            onSettings={() => setShowSettings(true)}
-            scores={dailyScores}
+            settings={settings}
+          onSettingsChange={changeSettings}
+            levelScores={dailyLevelScores}
             completedLevels={completedLevels}
             serverReady={serverReady}
             busy={busy}
