@@ -1,17 +1,15 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowUpRight, Crown, Gamepad2, Settings2, Trophy, X } from 'lucide-react';
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowUpRight, Gamepad2, LoaderCircle, LockKeyhole, Settings, Trophy, User, X } from 'lucide-react';
+import { fetchLeaderboard } from './api.js';
+import { getTimeUntilAmmanReset } from './dailyReset.js';
+import { sounds } from './audio.js';
+import { KEY_BINDINGS } from './controls.js';
 
 const MENU_ITEMS = [
   { id: 'play', label: 'PLAY', icon: Gamepad2 },
-  { id: 'settings', label: 'SETTINGS', icon: Settings2 },
+  { id: 'settings', label: 'SETTINGS', icon: Settings },
   { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
 ];
-
-function getTimeUntilUtcReset() {
-  const now = new Date();
-  const nextReset = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
-  return Math.max(0, nextReset - now.getTime());
-}
 
 function formatCountdown(milliseconds) {
   const totalSeconds = Math.ceil(milliseconds / 1000);
@@ -35,12 +33,29 @@ function createMotes(width, height) {
   }));
 }
 
+// Pre-rendered glow, because canvas shadowBlur on every mote is too slow on phones.
+function createGlowSprite(hue) {
+  const sprite = document.createElement('canvas');
+  sprite.width = 48;
+  sprite.height = 48;
+  const context = sprite.getContext('2d');
+  const gradient = context.createRadialGradient(24, 24, 0, 24, 24, 24);
+  gradient.addColorStop(0, `hsla(${hue}, 100%, 82%, 1)`);
+  gradient.addColorStop(0.12, `hsla(${hue}, 100%, 72%, 0.9)`);
+  gradient.addColorStop(0.35, `hsla(${hue}, 100%, 62%, 0.28)`);
+  gradient.addColorStop(1, `hsla(${hue}, 100%, 62%, 0)`);
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 48, 48);
+  return sprite;
+}
+
 function EmberField() {
   const canvasRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
+    const glowSprites = { 354: createGlowSprite(354), 192: createGlowSprite(192) };
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     let frame;
     let width = 0;
@@ -82,13 +97,10 @@ function EmberField() {
         context.moveTo(x, y);
         context.lineTo(x - mote.length * 0.6, y + mote.length);
         context.stroke();
-        context.fillStyle = `hsla(${mote.hue}, 100%, 76%, ${mote.alpha})`;
-        context.shadowBlur = 12;
-        context.shadowColor = `hsla(${mote.hue}, 100%, 62%, ${mote.alpha})`;
-        context.beginPath();
-        context.arc(x, y, mote.radius, 0, Math.PI * 2);
-        context.fill();
-        context.shadowBlur = 0;
+        const glowSize = mote.radius * 2 + 24;
+        context.globalAlpha = mote.alpha;
+        context.drawImage(glowSprites[mote.hue], x - glowSize / 2, y - glowSize / 2, glowSize, glowSize);
+        context.globalAlpha = 1;
         if (!staticFrame) {
           mote.y -= verticalDrift;
           mote.x += Math.sin(timestamp * 0.00028 + mote.phase) * 0.09;
@@ -252,76 +264,531 @@ function MenuAtmosphere({ remainingLevels }) {
   );
 }
 
-function LeaderboardDialog({ scores, onClose }) {
+// Keep in sync with the closing animation timings in main-menu.css.
+const PANEL_CLOSE_MS = 560;
+const HALF = 0.5;
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// Border-box size of an element, unaffected by CSS transforms during animations.
+function useBoxSize(ref) {
+  const [size, setSize] = useState(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize((previous) => (previous?.width === width && previous?.height === height ? previous : { width, height }));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref]);
+  return size;
+}
+
+// Shapes return outline points in pixels, inset half a pixel so 1px strokes stay crisp.
+function panelShape(width, height) {
+  const right = width - HALF;
+  const bottom = height - HALF;
+  const step = Math.round(width * 0.74);
+  const jog = Math.round(height * 0.3);
+  return [
+    [HALF, 34], [40, HALF], [step, HALF], [step + 13, 13], [right - 28, 13], [right - 6, 35],
+    [right - 6, jog], [right, jog + 6], [right, bottom - 26], [right - 24, bottom], [44, bottom], [HALF, bottom - 44],
+  ];
+}
+
+function keyShape(width, height) {
+  const cut = 6;
+  const right = width - HALF;
+  const bottom = height - HALF;
+  return [[cut, HALF], [right - cut, HALF], [right, cut], [right, bottom - cut], [right - cut, bottom], [cut, bottom], [HALF, bottom - cut], [HALF, cut]];
+}
+
+function closeShape(width, height) {
+  const right = width - HALF;
+  const bottom = height - HALF;
+  return [[7, HALF], [right, HALF], [right, bottom - 7], [right - 7, bottom], [HALF, bottom], [HALF, 7]];
+}
+
+const FRAME_INSET = 5;
+
+// Second, fainter line inside the outline gives the frame its double-lined tech edge.
+function panelMarks(width, height) {
+  const inner = panelShape(width - FRAME_INSET * 2, height - FRAME_INSET * 2)
+    .map(([x, y]) => `${x + FRAME_INSET},${y + FRAME_INSET}`)
+    .join(' ');
   return (
-    <div className="menu-dialog-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section className="menu-dialog" role="dialog" aria-modal="true" aria-labelledby="leaderboard-title">
-        <button type="button" className="menu-dialog-close" onClick={onClose} aria-label="Close leaderboard"><X size={18} /></button>
-        <span className="menu-dialog-kicker">TODAY'S RUN</span>
-        <h2 id="leaderboard-title">Leaderboard</h2>
-        {scores.length ? (
-          <ol className="menu-score-list">
-            {scores.slice(0, 5).map((entry, index) => (
-              <li key={`${entry.name}-${entry.total}-${index}`}>
-                <span className="menu-score-rank">{String(index + 1).padStart(2, '0')}</span>
-                <span className="menu-score-name">{entry.name}</span>
-                <span className="menu-score-time">{formatMenuTime(entry.total)}</span>
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <div className="menu-leaderboard-empty">
-            <Crown size={25} />
-            <p>No scores yet today.</p>
-            <span>Finish a level and your best time will appear here.</span>
-          </div>
-        )}
-      </section>
-    </div>
+    <>
+      <polygon className="cut-frame-inner" points={inner} />
+      <polyline points={`96,${height - HALF} 103,${height - 7} 110,${height - HALF}`} />
+    </>
   );
 }
 
+// The glowing crystal node on the connector, in unit coordinates (scaled to its radius).
+const GEM_OUTER = '-1,0 -0.3,-0.95 0.45,-0.6 1,0 0.45,0.6 -0.3,0.95';
+const GEM_CORE = '-0.38,-0.48 0.62,0 -0.38,0.48';
+const GEM_FACETS = 'M-1 0L-0.38 -0.48M-1 0L-0.38 0.48M-0.3 -0.95L-0.38 -0.48M0.45 -0.6L-0.38 -0.48M0.45 -0.6L0.62 0'
+  + 'M1 0L0.62 0M0.45 0.6L0.62 0M0.45 0.6L-0.38 0.48M-0.3 0.95L-0.38 0.48';
+const FAN_LINE_COUNT = 6;
+
+// An angular outline drawn in SVG, because CSS borders disappear along clip-path diagonals.
+function CutFrame({ shape, className = '', marks }) {
+  const ref = useRef(null);
+  const size = useBoxSize(ref);
+  const points = size?.width ? shape(size.width, size.height) : null;
+  return (
+    <span ref={ref} className={`cut-frame ${className}`} aria-hidden="true">
+      {points && (
+        <>
+          <span className="cut-frame-fill" style={{ clipPath: `polygon(${points.map(([x, y]) => `${x}px ${y}px`).join(', ')})` }} />
+          <svg className="cut-frame-line" width={size.width} height={size.height}>
+            <polygon points={points.map(([x, y]) => `${x},${y}`).join(' ')} />
+            {marks?.(size.width, size.height)}
+          </svg>
+        </>
+      )}
+    </span>
+  );
+}
+
+function RangeBracket() {
+  const ref = useRef(null);
+  const size = useBoxSize(ref);
+  const width = size?.width;
+  const height = size?.height;
+  return (
+    <span ref={ref} className="menu-range-bracket" aria-hidden="true">
+      {width > 0 && (
+        <svg width={width} height={height}>
+          <polyline points={`${HALF},${HALF} 8,${height - HALF} ${width - 8},${height - HALF} ${width - HALF},${HALF}`} />
+          {[0.25, 0.75].map((fraction) => {
+            const x = Math.round(width * fraction);
+            return <polyline key={fraction} points={`${x - 4},${height - HALF} ${x},${height + 3.5} ${x + 4},${height - HALF}`} />;
+          })}
+        </svg>
+      )}
+    </span>
+  );
+}
+
+function Toggle({ label, checked, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-label={label}
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={`menu-settings-toggle ${checked ? 'is-on' : ''}`}
+    >
+      <span aria-hidden="true" />
+    </button>
+  );
+}
+
+// Shared shell for the panels that unfold out of the main menu (Settings and Leaderboard),
+// so both always look and animate the same way.
+const MenuPanel = forwardRef(function MenuPanel({ id, title, closing, onClose, children }, ref) {
+  return (
+    <aside
+      ref={ref}
+      className={`menu-panel ${closing ? 'is-closing' : ''}`}
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={`menu-${id}-title`}
+    >
+      <CutFrame shape={panelShape} className="menu-panel-frame" marks={panelMarks} />
+      <div className="menu-panel-body">
+        <header className="menu-panel-header menu-panel-item" style={{ '--i': 0 }}>
+          <h2 id={`menu-${id}-title`}>{title.toUpperCase()}</h2>
+          <button type="button" className="menu-panel-close" onClick={onClose} aria-label={`Close ${title.toLowerCase()}`} autoFocus>
+            <CutFrame shape={closeShape} />
+            <X size={15} strokeWidth={1.5} />
+          </button>
+        </header>
+        {children}
+      </div>
+    </aside>
+  );
+});
+
+function SettingsContent({ settings, onSettingsChange }) {
+  const [hoveredBinding, setHoveredBinding] = useState(null);
+
+  // A short tick lets the player hear the new level, through the real sound-effect path.
+  function previewSound(next) {
+    if (next.sfx) sounds.move(next.volume, 3);
+  }
+
+  return (
+    <>
+      <div className="menu-settings-row menu-panel-item" style={{ '--i': 1 }}>
+        <span>MUSIC</span>
+        <Toggle label="Music" checked={settings.music} onChange={(music) => onSettingsChange({ ...settings, music })} />
+      </div>
+      <div className="menu-settings-row menu-panel-item" style={{ '--i': 2 }}>
+        <span>SOUND EFFECTS</span>
+        <Toggle
+          label="Sound effects"
+          checked={settings.sfx}
+          onChange={(sfx) => {
+            const next = { ...settings, sfx };
+            onSettingsChange(next);
+            previewSound(next);
+          }}
+        />
+      </div>
+
+      <div className="menu-settings-volume menu-panel-item" style={{ '--i': 3 }}>
+        <label htmlFor="menu-settings-volume">VOLUME</label>
+        <output htmlFor="menu-settings-volume">{settings.volume}%</output>
+        <input
+          id="menu-settings-volume"
+          type="range"
+          min="0"
+          max="100"
+          value={settings.volume}
+          style={{ '--range-progress': `${settings.volume}%` }}
+          onChange={(event) => onSettingsChange({ ...settings, volume: Number(event.target.value) })}
+          onPointerUp={() => previewSound(settings)}
+          onKeyUp={(event) => {
+            if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') previewSound(settings);
+          }}
+        />
+        <RangeBracket />
+      </div>
+
+      <div className="menu-panel-section menu-panel-item" style={{ '--i': 4 }}>
+        <div className="menu-panel-section-heading">
+          <span id="menu-keyboard-title">KEYBOARD CONTROLS</span>
+          <span className="menu-panel-hint" aria-hidden="true">{hoveredBinding?.name.toUpperCase()}</span>
+        </div>
+        <ul className="menu-keys" aria-labelledby="menu-keyboard-title">
+          {KEY_BINDINGS.map((binding) => (
+            <li
+              key={binding.action}
+              className={`menu-key ${binding.label.length > 1 ? 'is-wide' : ''}`}
+              title={binding.name}
+              onPointerEnter={() => setHoveredBinding(binding)}
+              onPointerLeave={() => setHoveredBinding(null)}
+            >
+              <CutFrame shape={keyShape} />
+              <kbd>{binding.label}</kbd>
+              <span className="sr-only">{binding.name}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </>
+  );
+}
+
+function BoardRow({ entry, best }) {
+  return (
+    <li className={`menu-board-row ${best ? 'is-best' : ''} ${entry.you ? 'is-you' : ''}`}>
+      <span className="menu-board-rank">{String(entry.rank).padStart(2, '0')}</span>
+      <span className="menu-board-avatar" aria-hidden="true"><User size={13} strokeWidth={1.8} /></span>
+      <span className="menu-board-name">
+        {entry.name}
+        {entry.you && <small className="menu-board-you">YOU</small>}
+      </span>
+      <span className="menu-board-moves">
+        {entry.moves} moves
+        {best && <small>BEST</small>}
+      </span>
+      <span className="menu-board-time">{formatMenuTime(entry.time_ms)}</span>
+    </li>
+  );
+}
+
+// Today's global top 10 per level. Without the server it falls back to this device's times.
+function LeaderboardContent({ levelScores, player }) {
+  const [activeLevel, setActiveLevel] = useState(() => (
+    [3, 2, 1].find((level) => levelScores?.[level]?.length) || 1
+  ));
+  const [boards, setBoards] = useState({});
+  const board = boards[activeLevel];
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setBoards((previous) => ({ ...previous, [activeLevel]: { ...previous[activeLevel], status: previous[activeLevel]?.entries ? 'ready' : 'loading' } }));
+    fetchLeaderboard(activeLevel, player.id, controller.signal)
+      .then((data) => setBoards((previous) => ({ ...previous, [activeLevel]: { status: 'ready', entries: data.entries, you: data.you } })))
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          console.info('Global leaderboard unavailable; showing this device.', error.message);
+          setBoards((previous) => ({ ...previous, [activeLevel]: { status: 'offline' } }));
+        }
+      });
+    return () => controller.abort();
+  }, [activeLevel, player.id]);
+
+  let entries = board?.entries || [];
+  if (board?.status === 'offline') {
+    entries = (levelScores?.[activeLevel] || [])
+      .filter((entry) => Number.isFinite(entry?.time))
+      .sort((left, right) => left.time - right.time)
+      .slice(0, 10)
+      .map((entry, index) => ({ rank: index + 1, name: player.name || 'You', moves: entry.moves, time_ms: entry.time, you: true }));
+  }
+
+  let footer = player.name ? `PLAYING AS ${player.name.toUpperCase()}` : 'FINISH A LEVEL TO JOIN';
+  if (board?.status === 'offline') footer = 'OFFLINE · SHOWING THIS DEVICE';
+
+  return (
+    <>
+      <div className="menu-board-tabs menu-panel-item" role="tablist" aria-label="Leaderboard level" style={{ '--i': 1 }}>
+        {[1, 2, 3].map((level) => (
+          <button
+            type="button"
+            key={level}
+            role="tab"
+            aria-selected={activeLevel === level}
+            aria-controls="menu-board-list"
+            className={`menu-board-tab ${activeLevel === level ? 'is-active' : ''}`}
+            onClick={() => setActiveLevel(level)}
+          >
+            Level {level}
+          </button>
+        ))}
+      </div>
+
+      {/* Always sized for ten rows, so switching levels never resizes or moves the panel. */}
+      <div
+        id="menu-board-list"
+        className="menu-board-list menu-panel-item"
+        role="tabpanel"
+        aria-label={`Level ${activeLevel} top times`}
+        aria-busy={board?.status === 'loading' || !board}
+        style={{ '--i': 2 }}
+      >
+        {entries.length > 0 && (
+          <ol>
+            {entries.map((entry) => <BoardRow key={`${entry.rank}-${entry.name}`} entry={entry} best={entry.rank === 1} />)}
+            {board?.you && (
+              <>
+                <li className="menu-board-gap" aria-hidden="true">···</li>
+                <BoardRow entry={board.you} best={false} />
+              </>
+            )}
+          </ol>
+        )}
+        {!entries.length && (
+          <div className="menu-board-empty">
+            {board?.status === 'ready' || board?.status === 'offline' ? (
+              <>
+                <span>NO TIMES YET</span>
+                <p>Be the first to finish level {activeLevel} today.</p>
+              </>
+            ) : (
+              <span className="menu-board-loading"><LoaderCircle className="menu-spin" size={15} /> LOADING</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="menu-board-footer menu-panel-item" style={{ '--i': 3 }}>
+        <span>TODAY · TOP 10</span>
+        <span className={board?.status === 'offline' ? 'is-offline' : ''}>{footer}</span>
+      </div>
+    </>
+  );
+}
+
+// Same mm:ss.cc format as the in-game clock, so times read identically everywhere.
 function formatMenuTime(milliseconds) {
-  const total = Math.max(0, Math.floor(milliseconds));
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return '--:--.--';
+  const total = Math.floor(milliseconds);
   const minutes = Math.floor(total / 60000);
   const seconds = Math.floor((total % 60000) / 1000);
   const centiseconds = Math.floor((total % 1000) / 10);
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 }
 
-export default function MainMenu({ onPlay, onSettings, scores = [], completedLevels = [], serverReady, busy, error }) {
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [timeUntilReset, setTimeUntilReset] = useState(getTimeUntilUtcReset);
-  const remainingLevels = [1, 2, 3, 4, 5].filter((level) => !completedLevels.includes(level));
+const PANEL_TITLES = { settings: 'Settings', leaderboard: 'Global Leaderboard' };
+
+export default function MainMenu({ onPlay, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], status, error }) {
+  // Which panel is showing ('settings' | 'leaderboard'), and whether it is folding away.
+  const [panel, setPanel] = useState(null);
+  const [panelClosing, setPanelClosing] = useState(false);
+  const panelTimer = useRef(null);
+  const queuedPanel = useRef(null);
+  const [timeUntilReset, setTimeUntilReset] = useState(getTimeUntilAmmanReset);
+  const remainingLevels = [1, 2, 3].filter((level) => !completedLevels.includes(level));
   const nextLevel = remainingLevels[0] || 1;
 
   useEffect(() => {
     if (remainingLevels.length) return undefined;
-    const updateCountdown = () => setTimeUntilReset(getTimeUntilUtcReset());
+    const updateCountdown = () => setTimeUntilReset(getTimeUntilAmmanReset());
     updateCountdown();
     const timer = window.setInterval(updateCountdown, 1000);
     return () => window.clearInterval(timer);
   }, [remainingLevels.length]);
 
+  const layoutRef = useRef(null);
+  const navRef = useRef(null);
+  const panelRef = useRef(null);
+  const upperLineRef = useRef(null);
+  const lowerLineRef = useRef(null);
+  const gemRef = useRef(null);
+  const fanLineRefs = useRef([]);
+  const settingsButtonRef = useRef(null);
+  const leaderboardButtonRef = useRef(null);
+  const openPanel = panel && !panelClosing ? panel : null;
+  const panelButtonRef = panel === 'leaderboard' ? leaderboardButtonRef : settingsButtonRef;
+
+  useEffect(() => () => window.clearTimeout(panelTimer.current), []);
+
+  function closePanel({ restoreFocus = false } = {}) {
+    if (!panel || panelClosing) return;
+    if (restoreFocus && panelRef.current?.contains(document.activeElement)) {
+      panelButtonRef.current?.focus({ preventScroll: true });
+    }
+    setPanelClosing(true);
+    panelTimer.current = window.setTimeout(() => {
+      const next = queuedPanel.current;
+      queuedPanel.current = null;
+      setPanelClosing(false);
+      setPanel(next);
+    }, prefersReducedMotion() ? 0 : PANEL_CLOSE_MS);
+  }
+
+  // Opening one panel while the other is showing folds the first away, then unfolds the second.
+  function togglePanel(id) {
+    if (panel === id) {
+      if (!panelClosing) {
+        closePanel();
+        return;
+      }
+      window.clearTimeout(panelTimer.current);
+      queuedPanel.current = null;
+      setPanelClosing(false);
+      return;
+    }
+    if (!panel) {
+      setPanel(id);
+      return;
+    }
+    queuedPanel.current = id;
+    closePanel();
+  }
+
   useEffect(() => {
-    if (!showLeaderboard) return undefined;
+    if (!openPanel) return undefined;
     function onKeyDown(event) {
-      if (event.key === 'Escape') setShowLeaderboard(false);
+      if (event.key === 'Escape') closePanel({ restoreFocus: true });
+    }
+    // Clicking the background folds the panel away; the menu buttons handle themselves.
+    function onPointerDown(event) {
+      if (panelRef.current?.contains(event.target) || navRef.current?.contains(event.target)) return;
+      closePanel();
     }
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showLeaderboard]);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  });
+
+  // Places the panel just past the navigation and draws the connector from its menu item.
+  const positionPanel = useCallback(() => {
+    const layout = layoutRef.current;
+    const element = panelRef.current;
+    const nav = navRef.current;
+    const button = panelButtonRef.current;
+    if (!layout || !element || !nav || !button) return;
+
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      for (const property of ['left', 'top', 'max-width', '--fold-top', '--fold-bottom']) element.style.removeProperty(property);
+      return;
+    }
+
+    const box = layout.getBoundingClientRect();
+    const navBox = nav.getBoundingClientRect();
+    const buttonBox = button.getBoundingClientRect();
+    // Room between the menu and the panel for the connector lines and the crystal node.
+    const gap = Math.min(170, Math.max(120, window.innerWidth * 0.09));
+    const left = Math.round(navBox.right - box.left + gap);
+    element.style.left = `${left}px`;
+    element.style.maxWidth = `${Math.max(320, box.width - left - 24)}px`;
+
+    const height = element.offsetHeight;
+    const centerY = buttonBox.top + buttonBox.height / 2 - box.top;
+    const margin = box.height - height >= 144 ? 72 : 16;
+    // The panel rides slightly above its menu row, so the connector meets its lower half.
+    const top = Math.round(Math.min(Math.max(centerY - height * 0.6, margin), Math.max(margin, box.height - height - margin)));
+    const foldY = Math.min(Math.max(centerY - top, 48), height - 48);
+    element.style.top = `${top}px`;
+    element.style.setProperty('--fold-top', `${foldY}px`);
+    element.style.setProperty('--fold-bottom', `${height - foldY}px`);
+
+    // Crystal node sits against the panel's left edge, between the menu row and the panel's middle.
+    const radius = Math.min(44, Math.max(28, window.innerWidth * 0.024));
+    const gemX = left - radius - 4;
+    const gemY = Math.min(Math.max((centerY + top + height / 2) / 2, top + 90), top + height - 90);
+    gemRef.current?.setAttribute('transform', `translate(${gemX} ${gemY}) scale(${radius})`);
+
+    // Two lines run from the menu item into the node...
+    const startX = navBox.right - box.left + 4;
+    const entryX = gemX - radius - 2;
+    const knee = startX + (entryX - startX) * 0.55;
+    upperLineRef.current?.setAttribute('d', `M${startX - 8} ${centerY - 12} L${startX} ${centerY - 5} L${knee} ${centerY - 5} L${entryX} ${gemY - 3}`);
+    lowerLineRef.current?.setAttribute('d', `M${startX - 8} ${centerY + 12} L${startX} ${centerY + 5} L${knee} ${centerY + 5} L${entryX} ${gemY + 3}`);
+
+    // ...and a wireframe fan spreads from its points to the panel's edge.
+    const edgeX = left + HALF;
+    const clampY = (y) => Math.min(Math.max(y, top + 34), top + height - 44);
+    const topApex = [gemX - radius * 0.3, gemY - radius * 0.95];
+    const bottomApex = [gemX - radius * 0.3, gemY + radius * 0.95];
+    const upperRight = [gemX + radius * 0.45, gemY - radius * 0.6];
+    const lowerRight = [gemX + radius * 0.45, gemY + radius * 0.6];
+    const fan = [
+      [topApex, top + 34],
+      [topApex, clampY(gemY - height * 0.24)],
+      [upperRight, clampY(gemY - height * 0.1)],
+      [lowerRight, clampY(gemY + height * 0.1)],
+      [bottomApex, clampY(gemY + height * 0.24)],
+      [bottomApex, top + height - 44],
+    ];
+    fan.forEach(([[fromX, fromY], toY], index) => {
+      fanLineRefs.current[index]?.setAttribute('d', `M${fromX} ${fromY} L${edgeX} ${toY}`);
+    });
+  }, [panelButtonRef]);
+
+  useLayoutEffect(() => {
+    if (!panel) return undefined;
+    positionPanel();
+    const observer = new ResizeObserver(() => positionPanel());
+    [layoutRef, navRef, panelRef].forEach((ref) => ref.current && observer.observe(ref.current));
+    window.addEventListener('resize', positionPanel);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', positionPanel);
+    };
+  }, [panel, positionPanel]);
 
   function handleAction(action) {
-    if (action === 'play') void onPlay(nextLevel);
-    if (action === 'settings') onSettings();
-    if (action === 'leaderboard') setShowLeaderboard(true);
+    if (action === 'play') onPlay(nextLevel);
+    else togglePanel(action);
+  }
+
+  const locked = remainingLevels.length === 0;
+  // Boards are generated on the device, so this only lasts a moment after the page loads.
+  const connecting = status !== 'ready';
+
+  function playLabel() {
+    if (locked) return 'LOCKED';
+    if (connecting) return 'LOADING';
+    return completedLevels.length ? 'CONTINUE' : 'PLAY';
   }
 
   return (
-    <section className="duel-menu" aria-label="Swipe Cover main menu">
+    <section className={`duel-menu ${openPanel ? 'has-panel-open' : ''}`} aria-label="Swipe Cover main menu">
       <MenuAtmosphere remainingLevels={remainingLevels} />
       <div className="menu-grain" aria-hidden="true" />
 
@@ -330,44 +797,111 @@ export default function MainMenu({ onPlay, onSettings, scores = [], completedLev
         <span className="menu-brand-name">SWIPE COVER</span>
       </header>
 
-      <div className="menu-layout">
+      <div className="menu-layout" ref={layoutRef}>
         <section className="menu-navigation" aria-label="Main menu">
           <div className="menu-orbit menu-orbit-one" aria-hidden="true" />
           <div className="menu-orbit menu-orbit-two" aria-hidden="true" />
-          <nav>
-            {MENU_ITEMS.filter(({ id }) => id !== 'play' || remainingLevels.length > 0).map(({ id, label, icon: Icon }) => (
-              <button
-                type="button"
-                key={id}
-                onClick={() => handleAction(id)}
-                className={`menu-nav-item ${id === 'play' ? 'is-primary' : ''}`}
-                disabled={id === 'play' && (!serverReady || busy)}
-                aria-disabled={id === 'play' && (!serverReady || busy)}
-                aria-label={label}
-              >
-                <span className="menu-nav-icon"><Icon size={17} strokeWidth={1.35} /></span>
-                <span className="menu-nav-label">{label}</span>
-                <ArrowUpRight className="menu-nav-arrow" size={16} strokeWidth={1.5} />
-              </button>
-            ))}
+          <nav ref={navRef}>
+            {MENU_ITEMS.map(({ id, label, icon: Icon }) => {
+              const isPlay = id === 'play';
+              let icon = <Icon size={17} strokeWidth={1.35} />;
+              if (isPlay && locked) icon = <LockKeyhole size={17} strokeWidth={1.35} />;
+              else if (isPlay && connecting) icon = <LoaderCircle className="menu-spin" size={17} strokeWidth={1.35} />;
+              return (
+                <button
+                  type="button"
+                  key={id}
+                  ref={id === 'settings' ? settingsButtonRef : id === 'leaderboard' ? leaderboardButtonRef : undefined}
+                  onClick={() => handleAction(id)}
+                  className={`menu-nav-item ${isPlay && !locked && !openPanel ? 'is-primary' : ''} ${isPlay && (locked || connecting) ? 'is-locked' : ''} ${openPanel === id ? 'is-selected' : ''}`}
+                  disabled={isPlay && (locked || connecting)}
+                  aria-label={isPlay && locked ? 'Play is locked until the daily puzzles reset' : undefined}
+                  aria-expanded={isPlay ? undefined : openPanel === id}
+                >
+                  <span className="menu-nav-icon">{icon}</span>
+                  <span className="menu-nav-label">{isPlay ? playLabel() : label}</span>
+                  {!(isPlay && (locked || connecting)) && <ArrowUpRight className="menu-nav-arrow" size={16} strokeWidth={1.5} />}
+                </button>
+              );
+            })}
           </nav>
           {remainingLevels.length === 0 && (
             <p className="menu-countdown">
-              <span>DAILY RUN COMPLETE</span>
-              <strong>Come back after {formatCountdown(timeUntilReset)}</strong>
+              <span>COME BACK IN</span>
+              <strong>{formatCountdown(timeUntilReset)}</strong>
             </p>
           )}
           {error && <p className="menu-error" role="alert">{error}</p>}
         </section>
+        {panel && (
+          <>
+            <svg key={`${panel}-connector`} className={`menu-panel-connector ${panelClosing ? 'is-closing' : ''}`} aria-hidden="true">
+              <defs>
+                <radialGradient id="menu-gem-halo">
+                  <stop offset="0" stopColor="#4ef3d0" stopOpacity=".42" />
+                  <stop offset=".45" stopColor="#3fc9c4" stopOpacity=".14" />
+                  <stop offset="1" stopColor="#3fc9c4" stopOpacity="0" />
+                </radialGradient>
+                <linearGradient id="menu-gem-fill" x1="0" x2="1" y1="0" y2="1">
+                  <stop offset="0" stopColor="#bff8ec" stopOpacity=".55" />
+                  <stop offset=".5" stopColor="#3cc7c0" stopOpacity=".38" />
+                  <stop offset="1" stopColor="#0d4a55" stopOpacity=".7" />
+                </linearGradient>
+                <linearGradient id="menu-gem-core" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0" stopColor="#e9fffa" />
+                  <stop offset="1" stopColor="#4ef3d0" />
+                </linearGradient>
+                <filter id="menu-gem-glow" x="-1" y="-1" width="3" height="3">
+                  <feGaussianBlur stdDeviation="0.16" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <path ref={upperLineRef} className="menu-link-line" pathLength="1" />
+              <path ref={lowerLineRef} className="menu-link-line" pathLength="1" />
+              {Array.from({ length: FAN_LINE_COUNT }, (_, index) => (
+                <path
+                  key={index}
+                  ref={(element) => { fanLineRefs.current[index] = element; }}
+                  className="menu-fan-line"
+                  pathLength="1"
+                  style={{ '--n': index }}
+                />
+              ))}
+              <g ref={gemRef}>
+                <g className="menu-gem">
+                  <circle className="menu-gem-halo" r="2.6" fill="url(#menu-gem-halo)" />
+                  <g filter="url(#menu-gem-glow)">
+                    <polygon points={GEM_OUTER} fill="url(#menu-gem-fill)" className="menu-gem-edge" vectorEffect="non-scaling-stroke" />
+                    <polygon points={GEM_CORE} fill="url(#menu-gem-core)" className="menu-gem-core" vectorEffect="non-scaling-stroke" />
+                    <path d={GEM_FACETS} className="menu-gem-facets" vectorEffect="non-scaling-stroke" />
+                  </g>
+                </g>
+              </g>
+            </svg>
+            <MenuPanel
+              key={panel}
+              ref={panelRef}
+              id={panel}
+              title={PANEL_TITLES[panel]}
+              closing={panelClosing}
+              onClose={() => closePanel({ restoreFocus: true })}
+            >
+              {panel === 'settings'
+                ? <SettingsContent settings={settings} onSettingsChange={onSettingsChange} />
+                : <LeaderboardContent levelScores={levelScores} player={player} />}
+            </MenuPanel>
+          </>
+        )}
       </div>
 
       <div className="menu-footer">
-        <span><i /> {completedLevels.length} / 5 LEVELS CLEARED TODAY</span>
+        <span><i /> {completedLevels.length} / 3 GAMES CLEARED TODAY</span>
         <span className="menu-footer-divider" />
         <span>MOVE WITH INTENTION</span>
       </div>
-
-      {showLeaderboard && <LeaderboardDialog scores={scores} onClose={() => setShowLeaderboard(false)} />}
     </section>
   );
 }
