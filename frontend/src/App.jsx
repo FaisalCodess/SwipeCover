@@ -1,20 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown,
-  ArrowLeft,
   ArrowRight,
-  ArrowUp,
   ChevronLeft,
   Clock3,
-  Gamepad2,
   Keyboard,
   LoaderCircle,
   Moon,
   Pause,
   Play,
   RotateCcw,
-  Settings2,
-  Sparkles,
   Sun,
   Trophy,
   Undo2,
@@ -22,8 +16,10 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import MainMenu from './MainMenu.jsx';
+import MainMenu, { BoardFrame, CutFrame, keyShape, SkyAbove } from './MainMenu.jsx';
+import BackgroundMusic from './BackgroundMusic.jsx';
 import './main-menu.css';
+import './game-view.css';
 import { countDots, DIRECTION_STEPS, slide } from './game.js';
 import { sounds, startMusic, vibrate } from './audio.js';
 import { KEY_ACTIONS, KEY_BINDINGS } from './controls.js';
@@ -40,6 +36,10 @@ import {
 } from './api.js';
 
 const STORAGE_KEY = 'swipe-cover-save-v2';
+// Keep in sync with the .camera animations in game-view.css.
+const TRAVEL_MS = 1700;
+const TRAVEL_DOWN_DELAY_MS = 350;
+const UI_LEAD_MS = 650;
 const LEVELS = 3;
 const KEEP_SCORE_DAYS = 14;
 const MAX_QUEUED_MOVES = 8;
@@ -47,17 +47,12 @@ const MAX_HISTORY = 400;
 const CELEBRATION_MS = 700;
 // Matches the `pop-out` animation in index.css.
 const POPUP_EXIT_MS = 200;
-const DIRECTIONS = [
-  { id: 'up', label: 'Up', icon: ArrowUp },
-  { id: 'left', label: 'Left', icon: ArrowLeft },
-  { id: 'down', label: 'Down', icon: ArrowDown },
-  { id: 'right', label: 'Right', icon: ArrowRight },
-];
 const DEFAULT_SETTINGS = {
   theme: 'dark',
   music: true,
   sfx: true,
-  volume: 65,
+  musicVolume: 70,
+  sfxVolume: 65,
 };
 
 function pruneLeaderboard(leaderboard, today) {
@@ -71,6 +66,12 @@ function readSavedState() {
     const settings = { ...DEFAULT_SETTINGS };
     for (const key of Object.keys(DEFAULT_SETTINGS)) {
       if (typeof saved.settings?.[key] === typeof DEFAULT_SETTINGS[key]) settings[key] = saved.settings[key];
+    }
+    // Older saves had one shared "volume"; keep it for whichever new slider has no saved value.
+    const oldVolume = saved.settings?.volume;
+    if (typeof oldVolume === 'number') {
+      if (typeof saved.settings?.musicVolume !== 'number') settings.musicVolume = oldVolume;
+      if (typeof saved.settings?.sfxVolume !== 'number') settings.sfxVolume = oldVolume;
     }
     const leaderboard = saved.leaderboard && typeof saved.leaderboard === 'object' ? saved.leaderboard : {};
     // The id ties a device's global leaderboard entries together; the name is chosen on the first win.
@@ -152,6 +153,10 @@ function useStopwatch() {
         current.accumulated = 0;
         current.startedAt = performance.now();
       },
+      reset() {
+        current.accumulated = 0;
+        current.startedAt = null;
+      },
       pause() {
         current.accumulated = read();
         current.startedAt = null;
@@ -182,6 +187,15 @@ function TimerText({ read, className = '' }) {
     return () => window.cancelAnimationFrame(frame);
   }, [read]);
   return <span ref={ref} role="timer" className={className} />;
+}
+
+function GameChip({ children, className = '', ...props }) {
+  return (
+    <button type="button" className={`game-chip ${className}`} {...props}>
+      <CutFrame shape={keyShape} />
+      <span className="game-chip-label">{children}</span>
+    </button>
+  );
 }
 
 function Panel({ children, className = '' }) {
@@ -303,7 +317,7 @@ function SettingsDialog({ settings, onSettingsChange, onClose, closing }) {
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 {settings.music ? <Volume2 size={18} className="text-accent" /> : <VolumeX size={18} className="text-faint" />}
-                <div><p className="text-sm font-semibold">Music</p><p className="text-xs text-muted">Background melody</p></div>
+                <div><p className="text-sm font-semibold">Music</p><p className="text-xs text-muted">Background music</p></div>
               </div>
               <Switch label="Music" checked={settings.music} onChange={(music) => onSettingsChange({ ...settings, music })} />
             </div>
@@ -314,17 +328,23 @@ function SettingsDialog({ settings, onSettingsChange, onClose, closing }) {
               </div>
               <Switch label="Sound effects" checked={settings.sfx} onChange={(sfx) => onSettingsChange({ ...settings, sfx })} />
             </div>
-            <label className="block">
-              <span className="flex justify-between text-sm font-semibold"><span>Volume</span><span className="text-accent">{settings.volume}%</span></span>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={settings.volume}
-                onChange={(event) => onSettingsChange({ ...settings, volume: Number(event.target.value) })}
-                className="mt-3 h-1.5 w-full cursor-pointer accent-[#7ce8b9]"
-              />
-            </label>
+            {[
+              { key: 'musicVolume', label: 'Music volume' },
+              { key: 'sfxVolume', label: 'Sound effects volume' },
+            ].map(({ key, label }) => (
+              <label key={key} className="block">
+                <span className="flex justify-between text-sm font-semibold"><span>{label}</span><span className="text-accent">{settings[key]}%</span></span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={settings[key]}
+                  onChange={(event) => onSettingsChange({ ...settings, [key]: Number(event.target.value) })}
+                  onPointerUp={() => key === 'sfxVolume' && settings.sfx && sounds.move(settings.sfxVolume, 3)}
+                  className="mt-3 h-1.5 w-full cursor-pointer accent-[#7ce8b9]"
+                />
+              </label>
+            ))}
           </div>
           <div className="mt-7 rounded-2xl border border-line/[0.07] bg-line/[0.025] p-4">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-soft"><Keyboard size={15} /> Keyboard controls</div>
@@ -343,7 +363,7 @@ function SettingsDialog({ settings, onSettingsChange, onClose, closing }) {
   );
 }
 
-function GameBoard({ run, anim, bump, phase, theme, onMove, onResume }) {
+function GameBoard({ run, anim, bump, phase, onMove, onResume }) {
   const gesture = useRef(null);
   const { board, player } = run;
   const rows = board.length;
@@ -373,17 +393,18 @@ function GameBoard({ run, anim, bump, phase, theme, onMove, onResume }) {
 
   return (
     <div
-      className={`board-touch relative mx-auto w-full max-w-[690px] overflow-hidden rounded-[1.65rem] border p-2.5 shadow-inner sm:rounded-[2rem] sm:p-4 ${theme === 'light' ? 'border-emerald-950/10 bg-[#e3ebe6]' : 'border-white/[0.07] bg-[#0b1015]'}`}
+      className="board-touch game-board-frame"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={() => { gesture.current = null; }}
       onPointerCancel={() => { gesture.current = null; }}
     >
+      <BoardFrame />
       <div
         className={`board-grid ${celebrating ? 'board-won' : ''}`}
         style={{ '--rows': rows, '--cols': cols }}
         role="img"
-        aria-label={`Game board, ${run.remaining} dots remaining`}
+        aria-label={`Game board, ${run.remaining} squares left to cover`}
       >
         {board.flatMap((row, rowIndex) => row.map((cell, colIndex) => {
           const cellKey = `${rowIndex}-${colIndex}`;
@@ -395,16 +416,26 @@ function GameBoard({ run, anim, bump, phase, theme, onMove, onResume }) {
             );
           }
           const freshDelay = anim.fresh?.[cellKey];
+          // Squares of the same kind (painted or not yet painted) join up into one shape.
+          // The square under the ball counts as painted.
+          const kind = cell === '.' ? 'open' : 'covered';
+          const same = (r, c) => {
+            const other = board[r]?.[c];
+            return other !== undefined && other !== '|' && (other === '.' ? 'open' : 'covered') === kind;
+          };
+          const up = same(rowIndex - 1, colIndex);
+          const right = same(rowIndex, colIndex + 1);
+          const down = same(rowIndex + 1, colIndex);
+          const left = same(rowIndex, colIndex - 1);
+          const corner = right && down && same(rowIndex + 1, colIndex + 1);
+          const joins = `${up ? ' j-t' : ''}${right ? ' j-r' : ''}${down ? ' j-b' : ''}${left ? ' j-l' : ''}${corner ? ' j-d' : ''}`;
           return (
-            <div key={cellKey} className="board-cell grid min-h-0 min-w-0 place-items-center rounded-[5px] sm:rounded-[9px]">
-              {cell === '.' && <span className="board-dot" />}
-              {cell === '-' && (
-                <span
-                  key={freshDelay === undefined ? 'trail' : `fresh-${anim.id}`}
-                  className={`board-trail ${freshDelay === undefined ? '' : 'is-fresh'}`}
-                  style={{ animationDelay: celebrating ? undefined : `${freshDelay ?? 0}ms`, '--wave': rowIndex + colIndex }}
-                />
-              )}
+            <div key={cellKey} className="board-cell">
+              <span
+                key={kind === 'open' ? 'open' : (freshDelay === undefined ? 'trail' : `fresh-${anim.id}`)}
+                className={`board-tile is-${kind}${kind === 'covered' && freshDelay !== undefined ? ' is-fresh' : ''}${joins}`}
+                style={{ animationDelay: celebrating ? undefined : `${freshDelay ?? 0}ms`, '--wave': rowIndex + colIndex }}
+              />
             </div>
           );
         }))}
@@ -422,7 +453,7 @@ function GameBoard({ run, anim, bump, phase, theme, onMove, onResume }) {
       </div>
 
       {phase === 'paused' && (
-        <div className="board-pause-cover absolute inset-0 z-20 grid place-items-center bg-[#0b1015]/80 backdrop-blur-md">
+        <div className="board-pause-cover absolute inset-0 z-20 grid place-items-center bg-[#07121c]/80 backdrop-blur-md">
           <div className="text-center">
             <p className="font-display text-2xl font-bold text-white">Paused</p>
             <p className="mt-1 text-xs text-slate-300">The clock is stopped</p>
@@ -430,41 +461,6 @@ function GameBoard({ run, anim, bump, phase, theme, onMove, onResume }) {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function DirectionPad({ onMove, disabled }) {
-  return (
-    <div className="grid grid-cols-3 grid-rows-2 gap-2" aria-label="Movement controls">
-      {DIRECTIONS.map(({ id, label, icon: Icon }) => (
-        <button
-          key={id}
-          type="button"
-          disabled={disabled}
-          // Pointer down instead of click: the move starts the moment the finger lands.
-          onPointerDown={(event) => {
-            if (event.pointerType === 'mouse' && event.button !== 0) return;
-            event.preventDefault();
-            onMove(id);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              event.stopPropagation();
-              onMove(id);
-            }
-          }}
-          aria-label={`Move ${label.toLowerCase()}`}
-          className={`grid h-14 w-full place-items-center rounded-xl border border-line/10 bg-line/[0.035] text-soft transition hover:border-mint/40 hover:bg-mint/10 hover:text-accent active:scale-95 active:bg-mint/15 disabled:opacity-40 ${
-            id === 'up' ? 'col-start-2 row-start-1' :
-              id === 'left' ? 'col-start-1 row-start-2' :
-                id === 'down' ? 'col-start-2 row-start-2' : 'col-start-3 row-start-2'
-          }`}
-        >
-          <Icon size={20} />
-        </button>
-      ))}
     </div>
   );
 }
@@ -528,7 +524,7 @@ function WinDialog({ run, result, globalResult, onJoin, onReplay, onNext, onHome
           <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl border border-mint/20 bg-mint/10 text-accent shadow-glow"><Trophy size={28} /></div>
           <p className="mt-5 text-xs font-bold uppercase tracking-[0.22em] text-accent">Level {run.level} of {LEVELS} complete</p>
           <h2 id="win-title" className="mt-2 font-display text-3xl font-bold">{isLast ? 'Daily run complete!' : 'Beautifully done.'}</h2>
-          <p className="mt-2 text-sm text-muted">Every dot covered in</p>
+          <p className="mt-2 text-sm text-muted">Every square covered in</p>
           <p className="mt-2 font-display text-4xl font-bold tabular-nums text-fg">{formatTime(result.time)}</p>
           <p className="mt-2 text-sm text-muted">{result.moves} {result.moves === 1 ? 'move' : 'moves'}</p>
           <GlobalStanding level={run.level} globalResult={globalResult} onJoin={onJoin} />
@@ -569,6 +565,11 @@ export default function App() {
   const [feedback, setFeedback] = useState('');
   const [storageError, setStorageError] = useState('');
   const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const [musicFailed, setMusicFailed] = useState(false);
+  const [travel, setTravel] = useState(null);
+  const [gameLive, setGameLive] = useState(false);
+  const [menuReveal, setMenuReveal] = useState(false);
+  const travelRef = useRef(null);
   const stopwatch = useStopwatch();
   const settingsDialog = usePresence(showSettings, POPUP_EXIT_MS);
 
@@ -662,19 +663,19 @@ export default function App() {
   }, [audioUnlocked]);
 
   useEffect(() => {
-    if (!settings.music || !audioUnlocked) return undefined;
-    return startMusic(() => settingsRef.current.volume);
-  }, [audioUnlocked, settings.music]);
+    // The YouTube track is the main music; the synth melody is only a fallback if it cannot load.
+    if (!settings.music || !audioUnlocked || !musicFailed) return undefined;
+    return startMusic(() => settingsRef.current.musicVolume);
+  }, [audioUnlocked, musicFailed, settings.music]);
 
-  const light = settings.theme === 'light' && screen === 'game';
   useEffect(() => {
-    document.body.classList.toggle('light-theme', light);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#edf3ef' : '#0b0f14');
-  }, [light]);
+    document.body.classList.remove('light-theme');
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#07121c');
+  }, []);
 
   const sfx = useCallback((name, ...args) => {
     const current = settingsRef.current;
-    if (current.sfx) sounds[name](current.volume, ...args);
+    if (current.sfx) sounds[name](current.sfxVolume, ...args);
   }, []);
 
   const saveScore = useCallback((day, level, time, moves) => {
@@ -691,7 +692,7 @@ export default function App() {
     return { isBest: time < best, best: Math.min(best, time) };
   }, []);
 
-  const startRun = useCallback((data) => {
+  const startRun = useCallback((data, { deferred = false } = {}) => {
     clearPending();
     const board = data.board.map((row) => [...row]);
     commitRun({
@@ -713,19 +714,49 @@ export default function App() {
     submission.current += 1;
     setGlobalResult({ status: 'idle' });
     pauseReason.current = null;
-    stopwatch.start();
     changePhase('playing');
+    if (deferred) {
+      // The camera is still travelling: the clock and the screen switch wait until it lands.
+      stopwatch.reset();
+      return;
+    }
+    stopwatch.start();
     screenRef.current = 'game';
     setScreen('game');
+    setGameLive(true);
     window.scrollTo({ top: 0 });
   }, [changePhase, clearPending, commitRun, stopwatch]);
+
+  // Menu -> game: the camera pans up from the menu into the sky above it, then the
+  // game builds itself in and the clock starts.
+  const travelUp = useCallback((data) => {
+    if (travelRef.current) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      startRun(data);
+      return;
+    }
+    travelRef.current = 'up';
+    setGameLive(false);
+    startRun(data, { deferred: true });
+    setTravel('up');
+    window.setTimeout(() => setGameLive(true), TRAVEL_MS - UI_LEAD_MS);
+    window.setTimeout(() => {
+      stopwatch.start();
+      screenRef.current = 'game';
+      setScreen('game');
+      setTravel(null);
+      travelRef.current = null;
+    }, TRAVEL_MS);
+  }, [startRun, stopwatch]);
 
   const startLevel = useCallback((level) => {
     const data = dailyRef.current.boards[level];
     if (!data) return false;
-    startRun(data);
+    // From the menu the switch is animated; "next level" inside the game stays instant.
+    if (screenRef.current === 'home') travelUp(data);
+    else startRun(data);
     return true;
-  }, [startRun]);
+  }, [startRun, travelUp]);
 
   const replayLevel = useCallback(() => {
     const current = runRef.current;
@@ -895,6 +926,26 @@ export default function App() {
     setScreen('home');
   }, [clearPending, stopwatch]);
 
+  // Game -> menu: the game fades out, then the camera pans back down.
+  const goHome = useCallback(() => {
+    if (travelRef.current) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      returnHome();
+      return;
+    }
+    travelRef.current = 'down';
+    stopwatch.pause();
+    setGameLive(false);
+    setMenuReveal(false);
+    setTravel('down');
+    window.setTimeout(() => setMenuReveal(true), TRAVEL_DOWN_DELAY_MS + TRAVEL_MS * 0.55);
+    window.setTimeout(() => {
+      returnHome();
+      setTravel(null);
+      travelRef.current = null;
+    }, TRAVEL_DOWN_DELAY_MS + TRAVEL_MS);
+  }, [returnHome, stopwatch]);
+
   // Stop the clock whenever the player looks away.
   useEffect(() => {
     const onHide = () => {
@@ -956,12 +1007,100 @@ export default function App() {
   const playing = phase === 'playing';
 
   return (
-    <main className={screen === 'home' ? '' : 'min-h-[100svh] px-4 py-5 sm:px-6 sm:py-8'}>
-      {screen === 'home' && (
+    <main>
+      <BackgroundMusic
+        unlocked={audioUnlocked && !musicFailed}
+        playing={settings.music}
+        volume={settings.musicVolume}
+        onError={() => setMusicFailed(true)}
+      />
+      {/* One logo for both screens: it glides between the menu spot and the game spot. */}
+      <button
+        type="button"
+        className={`shared-brand ${(travel === 'up' || (!travel && screen === 'game')) ? 'to-game' : 'to-menu'} ${travel ? `is-${travel}` : ''}`}
+        onClick={goHome}
+        disabled={screen !== 'game' || Boolean(travel)}
+        aria-label={screen === 'game' ? 'Back to menu' : 'Swipe Cover'}
+      >
+        <span className="menu-brand-orb" aria-hidden="true"><i /></span>
+        <span className="menu-brand-name">SWIPE COVER</span>
+      </button>
+      <div className={`camera ${travel ? `camera-${travel}` : ''}`}>
+      {run && (screen === 'game' || travel) && (
+        <section className={`duel-menu game-view ${gameLive ? 'is-live' : ''}`} aria-label="Swipe Cover game">
+          <SkyAbove />
+          <div className="menu-grain" aria-hidden="true" />
+
+          <header className="game-topbar">
+            <span />
+            <div className="game-topbar-actions">
+              <GameChip onClick={goHome}>
+                <ChevronLeft size={15} strokeWidth={1.6} /> MENU
+              </GameChip>
+              <GameChip
+                className="game-chip-icon"
+                aria-label={settings.music ? 'Mute music' : 'Unmute music'}
+                title={settings.music ? 'Mute music' : 'Unmute music'}
+                onClick={() => changeSettings({ ...settings, music: !settings.music })}
+              >
+                {settings.music ? <Volume2 size={16} strokeWidth={1.6} /> : <VolumeX size={16} strokeWidth={1.6} />}
+              </GameChip>
+            </div>
+          </header>
+
+          <div className="game-stage" style={{ '--board-ratio': run.board[0].length / run.board.length }}>
+            <div className="game-hud">
+              <div className="game-level">
+                <span className="game-level-label">LEVEL {run.level} / {LEVELS}</span>
+                <span className="game-pips" aria-hidden="true">
+                  {Array.from({ length: LEVELS }, (_, index) => {
+                    const level = index + 1;
+                    const done = completedLevels.includes(level);
+                    return <i key={level} className={level === run.level ? 'is-current' : done ? 'is-done' : ''} />;
+                  })}
+                </span>
+              </div>
+              <div className="game-timer">
+                <Clock3 size={16} strokeWidth={1.5} />
+                <TimerText read={stopwatch.read} className="game-timer-text tabular-nums" />
+              </div>
+            </div>
+
+            <GameBoard
+              run={run}
+              anim={anim}
+              bump={bump}
+              phase={phase}
+              onMove={requestMove}
+              onResume={resumeGame}
+            />
+
+            <div className="game-statusbar">
+              <span className="game-status-dots"><i /> {run.remaining} {run.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
+              <span role="status" aria-live="polite" className="game-status-feedback">{feedback}</span>
+              <span className="tabular-nums">{run.moves} {run.moves === 1 ? 'MOVE' : 'MOVES'}</span>
+            </div>
+
+            <div className="game-actions">
+              <GameChip onClick={undoMove} disabled={!playing || !run.history.length}>
+                <Undo2 size={14} strokeWidth={1.6} /> UNDO
+              </GameChip>
+              <GameChip onClick={restartLevel} disabled={!playing || run.moves === 0}>
+                <RotateCcw size={14} strokeWidth={1.6} /> RESTART
+              </GameChip>
+              <GameChip onClick={() => pauseGame('manual')} disabled={!playing}>
+                <Pause size={14} strokeWidth={1.6} /> PAUSE
+              </GameChip>
+            </div>
+          </div>
+        </section>
+      )}
+      {(screen === 'home' || travel) && (
         <MainMenu
           onPlay={startLevel}
           settings={settings}
           onSettingsChange={changeSettings}
+          leaving={travel === 'up' || (travel === 'down' && !menuReveal)}
           levelScores={todaysScores}
           player={player}
           completedLevels={completedLevels}
@@ -969,108 +1108,9 @@ export default function App() {
           error={storageError}
         />
       )}
+      </div>
 
-      {screen === 'game' && run && (
-        <div className="mx-auto w-full max-w-6xl">
-          <header className="flex items-center justify-between">
-            <button type="button" className="rounded-xl text-left" onClick={returnHome} aria-label="Back to menu">
-              <Brand />
-            </button>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={returnHome} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted transition hover:bg-line/5 hover:text-fg">
-                <ChevronLeft size={16} /><span className="hidden sm:inline">Menu</span>
-              </button>
-              <IconButton label="Open settings" onClick={openSettings}><Settings2 size={18} /></IconButton>
-            </div>
-          </header>
-
-          <div className="mx-auto max-w-5xl py-5 sm:py-9">
-            <div className="mb-4 flex items-end justify-between gap-3 sm:mb-5">
-              <div className="min-w-0">
-                <div className="flex items-center gap-3">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-accent sm:text-xs sm:tracking-[0.22em]"><span className="hidden sm:inline">Daily puzzle · </span>Level {run.level} / {LEVELS}</p>
-                  <div className="flex gap-1.5" aria-hidden="true">
-                    {Array.from({ length: LEVELS }, (_, index) => {
-                      const level = index + 1;
-                      const done = completedLevels.includes(level);
-                      return (
-                        <span
-                          key={level}
-                          className={`h-1.5 w-5 rounded-full ${level === run.level ? 'bg-mint' : done ? 'bg-mint/45' : 'bg-line/10'}`}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-                <h1 className="mt-2 font-display text-2xl font-bold tracking-tight sm:text-4xl">Cover every dot</h1>
-              </div>
-              <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-line/[0.08] bg-line/[0.035] px-3 py-2 sm:px-4 sm:py-2.5">
-                <Clock3 size={17} className="hidden text-accent sm:block" />
-                <TimerText read={stopwatch.read} className="min-w-[5.2rem] font-display text-base font-bold tabular-nums sm:min-w-[5.6rem] sm:text-lg" />
-              </div>
-            </div>
-
-            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_230px]">
-              <Panel className="overflow-hidden p-2.5 sm:p-5">
-                <div className="mb-3 flex min-h-5 items-center justify-between gap-2 px-1 text-xs font-medium text-muted sm:mb-4 sm:px-2">
-                  <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-mint" /> {run.remaining} {run.remaining === 1 ? 'dot' : 'dots'} left</span>
-                  <span role="status" aria-live="polite" className="truncate text-warn">{feedback}</span>
-                  <span className="shrink-0 tabular-nums">{run.moves} {run.moves === 1 ? 'move' : 'moves'}</span>
-                </div>
-                <GameBoard
-                  run={run}
-                  anim={anim}
-                  bump={bump}
-                  phase={phase}
-                  theme={settings.theme}
-                  onMove={requestMove}
-                  onResume={resumeGame}
-                />
-                <div className="mt-3 flex items-center justify-between gap-2 px-1 sm:mt-4 sm:px-2">
-                  <p className="hidden items-center gap-2 text-xs text-faint md:flex"><Keyboard size={14} /> WASD / arrows · Z undo · R restart</p>
-                  <div className="ml-auto flex items-center gap-1">
-                    <button type="button" onClick={undoMove} disabled={!playing || !run.history.length} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-muted transition hover:bg-line/[0.05] hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent">
-                      <Undo2 size={14} /> Undo
-                    </button>
-                    <button type="button" onClick={restartLevel} disabled={!playing || run.moves === 0} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-muted transition hover:bg-line/[0.05] hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent">
-                      <RotateCcw size={14} /> Restart
-                    </button>
-                    <button type="button" onClick={() => pauseGame('manual')} disabled={!playing} className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-muted transition hover:bg-line/[0.05] hover:text-fg disabled:opacity-40 disabled:hover:bg-transparent">
-                      <Pause size={14} /> Pause
-                    </button>
-                  </div>
-                </div>
-              </Panel>
-
-              <aside className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-                <Panel className="p-4 sm:p-5">
-                  <div className="flex items-center justify-between">
-                    <div><p className="text-xs font-bold uppercase tracking-wider text-faint">Movement</p><p className="mt-1 text-sm font-semibold">Pick a direction</p></div>
-                    <Gamepad2 size={19} className="text-accent" />
-                  </div>
-                  <div className="mx-auto mt-4 max-w-[240px]"><DirectionPad onMove={requestMove} disabled={!playing} /></div>
-                  <p className="mt-3 text-center text-[11px] text-faint">Or swipe across the board</p>
-                </Panel>
-                <Panel className="p-4 sm:p-5">
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-faint"><Sparkles size={15} className="text-accent" /> How to play</div>
-                  <p className="mt-3 text-sm leading-6 text-soft">The ball slides until a wall or the edge stops it. Plan your route so the trail covers every green dot. Some moves can&apos;t be undone by sliding back, so think ahead.</p>
-                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line/[0.07] pt-4 text-xs text-faint">
-                    <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-mint/70" /> Dot</span>
-                    <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-rose-400/80" /> Covered</span>
-                    <span className="flex items-center gap-2"><span className="h-3 w-3 rounded-[3px] border border-white/20 bg-gradient-to-br from-[#87929d] to-[#38414b]" /> Wall</span>
-                  </div>
-                </Panel>
-              </aside>
-            </div>
-          </div>
-
-          <footer className="border-t border-line/[0.06] py-5 text-center text-xs text-faint">
-            Swipe Cover <span className="mx-2">·</span> Three fresh puzzles, every day
-          </footer>
-        </div>
-      )}
-
-      {screen === 'game' && run && phase === 'won' && result && (
+      {screen === 'game' && !travel && run && phase === 'won' && result && (
         <WinDialog
           run={run}
           result={result}
@@ -1078,7 +1118,7 @@ export default function App() {
           onJoin={joinLeaderboard}
           onReplay={replayLevel}
           onNext={() => startLevel(run.level + 1)}
-          onHome={returnHome}
+          onHome={goHome}
         />
       )}
 

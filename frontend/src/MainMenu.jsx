@@ -170,7 +170,7 @@ function CrystalRange() {
   );
 }
 
-function MenuAtmosphere({ remainingLevels }) {
+export function MenuAtmosphere({ remainingLevels }) {
   const root = useRef(null);
   const animationFrame = useRef(0);
 
@@ -264,6 +264,25 @@ function MenuAtmosphere({ remainingLevels }) {
   );
 }
 
+// The sky above the menu: the menu's own sky mirrored upwards, so the two meet without a
+// seam, darkening into a starry night as it goes up. The game screen sits in it.
+export function SkyAbove() {
+  return (
+    <div className="menu-atmosphere sky-above">
+      <div className="sky-above-base" />
+      <div className="sky-above-seam">
+        <div className="sky-above-mirror">
+          <div className="menu-sky" />
+          <div className="menu-vignette" />
+        </div>
+      </div>
+      <div className="sky-above-mist" />
+      <div className="sky-above-stars" />
+      <EmberField />
+    </div>
+  );
+}
+
 // Keep in sync with the closing animation timings in main-menu.css.
 const PANEL_CLOSE_MS = 560;
 const HALF = 0.5;
@@ -300,7 +319,7 @@ function panelShape(width, height) {
   ];
 }
 
-function keyShape(width, height) {
+export function keyShape(width, height) {
   const cut = 6;
   const right = width - HALF;
   const bottom = height - HALF;
@@ -328,6 +347,33 @@ function panelMarks(width, height) {
   );
 }
 
+// The board's frame: the menu panel's double-lined, cut-corner edge around the playfield.
+function boardShape(width, height) {
+  const right = width - HALF;
+  const bottom = height - HALF;
+  return [
+    [HALF, 28], [28, HALF], [right - 14, HALF], [right, 14],
+    [right, bottom - 28], [right - 28, bottom], [14, bottom], [HALF, bottom - 14],
+  ];
+}
+
+function boardMarks(width, height) {
+  const inner = boardShape(width - FRAME_INSET * 2, height - FRAME_INSET * 2)
+    .map(([x, y]) => `${x + FRAME_INSET},${y + FRAME_INSET}`)
+    .join(' ');
+  const middle = Math.round(width / 2);
+  return (
+    <>
+      <polygon className="cut-frame-inner" points={inner} />
+      <polyline points={`${middle - 8},${height - HALF} ${middle},${height - 7} ${middle + 8},${height - HALF}`} />
+    </>
+  );
+}
+
+export function BoardFrame() {
+  return <CutFrame shape={boardShape} marks={boardMarks} className="menu-panel-frame" />;
+}
+
 // The glowing crystal node on the connector, in unit coordinates (scaled to its radius).
 const GEM_OUTER = '-1,0 -0.3,-0.95 0.45,-0.6 1,0 0.45,0.6 -0.3,0.95';
 const GEM_CORE = '-0.38,-0.48 0.62,0 -0.38,0.48';
@@ -336,7 +382,7 @@ const GEM_FACETS = 'M-1 0L-0.38 -0.48M-1 0L-0.38 0.48M-0.3 -0.95L-0.38 -0.48M0.4
 const FAN_LINE_COUNT = 6;
 
 // An angular outline drawn in SVG, because CSS borders disappear along clip-path diagonals.
-function CutFrame({ shape, className = '', marks }) {
+export function CutFrame({ shape, className = '', marks }) {
   const ref = useRef(null);
   const size = useBoxSize(ref);
   const points = size?.width ? shape(size.width, size.height) : null;
@@ -421,7 +467,7 @@ function SettingsContent({ settings, onSettingsChange }) {
 
   // A short tick lets the player hear the new level, through the real sound-effect path.
   function previewSound(next) {
-    if (next.sfx) sounds.move(next.volume, 3);
+    if (next.sfx) sounds.move(next.sfxVolume, 3);
   }
 
   return (
@@ -443,26 +489,31 @@ function SettingsContent({ settings, onSettingsChange }) {
         />
       </div>
 
-      <div className="menu-settings-volume menu-panel-item" style={{ '--i': 3 }}>
-        <label htmlFor="menu-settings-volume">VOLUME</label>
-        <output htmlFor="menu-settings-volume">{settings.volume}%</output>
-        <input
-          id="menu-settings-volume"
-          type="range"
-          min="0"
-          max="100"
-          value={settings.volume}
-          style={{ '--range-progress': `${settings.volume}%` }}
-          onChange={(event) => onSettingsChange({ ...settings, volume: Number(event.target.value) })}
-          onPointerUp={() => previewSound(settings)}
-          onKeyUp={(event) => {
-            if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') previewSound(settings);
-          }}
-        />
-        <RangeBracket />
-      </div>
+      {[
+        { key: 'musicVolume', label: 'MUSIC VOLUME', id: 'menu-settings-music-volume', preview: false },
+        { key: 'sfxVolume', label: 'SFX VOLUME', id: 'menu-settings-sfx-volume', preview: true },
+      ].map(({ key, label, id, preview }, index) => (
+        <div key={key} className="menu-settings-volume menu-panel-item" style={{ '--i': 3 + index }}>
+          <label htmlFor={id}>{label}</label>
+          <output htmlFor={id}>{settings[key]}%</output>
+          <input
+            id={id}
+            type="range"
+            min="0"
+            max="100"
+            value={settings[key]}
+            style={{ '--range-progress': `${settings[key]}%` }}
+            onChange={(event) => onSettingsChange({ ...settings, [key]: Number(event.target.value) })}
+            onPointerUp={() => preview && previewSound(settings)}
+            onKeyUp={(event) => {
+              if (preview && (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End')) previewSound(settings);
+            }}
+          />
+          <RangeBracket />
+        </div>
+      ))}
 
-      <div className="menu-panel-section menu-panel-item" style={{ '--i': 4 }}>
+      <div className="menu-panel-section menu-panel-item" style={{ '--i': 5 }}>
         <div className="menu-panel-section-heading">
           <span id="menu-keyboard-title">KEYBOARD CONTROLS</span>
           <span className="menu-panel-hint" aria-hidden="true">{hoveredBinding?.name.toUpperCase()}</span>
@@ -611,7 +662,7 @@ function formatMenuTime(milliseconds) {
 
 const PANEL_TITLES = { settings: 'Settings', leaderboard: 'Global Leaderboard' };
 
-export default function MainMenu({ onPlay, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], status, error }) {
+export default function MainMenu({ onPlay, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], status, error }) {
   // Which panel is showing ('settings' | 'leaderboard'), and whether it is folding away.
   const [panel, setPanel] = useState(null);
   const [panelClosing, setPanelClosing] = useState(false);
@@ -788,14 +839,9 @@ export default function MainMenu({ onPlay, settings, onSettingsChange, levelScor
   }
 
   return (
-    <section className={`duel-menu ${openPanel ? 'has-panel-open' : ''}`} aria-label="Swipe Cover main menu">
+    <section className={`duel-menu ${openPanel ? 'has-panel-open' : ''} ${leaving ? 'is-leaving' : ''}`} aria-label="Swipe Cover main menu">
       <MenuAtmosphere remainingLevels={remainingLevels} />
       <div className="menu-grain" aria-hidden="true" />
-
-      <header className="menu-brand">
-        <span className="menu-brand-orb" aria-hidden="true"><i /></span>
-        <span className="menu-brand-name">SWIPE COVER</span>
-      </header>
 
       <div className="menu-layout" ref={layoutRef}>
         <section className="menu-navigation" aria-label="Main menu">

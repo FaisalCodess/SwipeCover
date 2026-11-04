@@ -1,0 +1,689 @@
+/* Game screen: same sky, glass and teal-on-navy look as the main menu. */
+
+.game-view {
+  display: flex;
+  flex-direction: column;
+  --teal: 145, 238, 219;
+  --neon: 103, 220, 213;
+  --glass: rgba(9, 22, 30, .66);
+}
+
+.game-topbar,
+.game-stage {
+  position: relative;
+  z-index: 5;
+}
+
+.game-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: clamp(16px, 3vh, 32px) clamp(16px, 3vw, 48px) 0;
+}
+
+/* The one shared logo. Menu spot matches the old menu brand; game spot sits in the top bar. */
+.shared-brand {
+  --brand-top: clamp(25px, 6vh, 61px);
+  --brand-left: clamp(25px, 7.7vw, 122px);
+  position: fixed;
+  z-index: 60;
+  top: var(--brand-top);
+  left: var(--brand-left);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition: top 1.7s cubic-bezier(.65, 0, .2, 1), left 1.7s cubic-bezier(.65, 0, .2, 1);
+}
+
+.shared-brand.to-game {
+  --brand-top: calc(clamp(16px, 3vh, 32px) + 6px);
+  --brand-left: clamp(16px, 3vw, 48px);
+}
+
+.shared-brand.is-down {
+  transition-delay: .35s;
+}
+
+.shared-brand:disabled {
+  cursor: default;
+}
+
+.shared-brand .menu-brand-orb {
+  position: relative;
+}
+
+@media (max-width: 390px) {
+  .shared-brand {
+    gap: 10px;
+  }
+
+  .shared-brand.to-menu {
+    --brand-left: 20px;
+  }
+}
+
+.game-topbar-actions,
+.game-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-chip {
+  --edge: rgba(174, 198, 204, .5);
+  position: relative;
+  display: inline-flex;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  border: 0;
+  color: rgba(222, 240, 236, .86);
+  background: none;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  cursor: pointer;
+  transition: color .2s;
+}
+
+.game-chip-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.game-chip-icon {
+  width: 38px;
+  padding: 0;
+}
+
+.game-chip .cut-frame-fill {
+  background: rgba(8, 26, 38, .5);
+  transition: background .2s;
+}
+
+.game-chip:hover:not(:disabled),
+.game-chip:focus-visible {
+  --edge: rgba(200, 240, 234, .9);
+  color: #fff;
+  outline: none;
+}
+
+.game-chip:hover:not(:disabled) .cut-frame-fill,
+.game-chip:focus-visible .cut-frame-fill {
+  background: rgba(30, 90, 105, .45);
+}
+
+.game-chip:disabled {
+  opacity: .38;
+  cursor: default;
+}
+
+.game-stage {
+  position: relative;
+  z-index: 5;
+}
+
+.game-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: clamp(16px, 3vh, 32px) clamp(16px, 3vw, 48px) 0;
+}
+
+/* The one shared logo. Menu spot matches the old menu brand; game spot sits in the top bar. */
+.shared-brand {
+  --brand-top: clamp(25px, 6vh, 61px);
+  --brand-left: clamp(25px, 7.7vw, 122px);
+  position: fixed;
+  z-index: 60;
+  top: var(--brand-top);
+  left: var(--brand-left);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition: top 1.7s cubic-bezier(.65, 0, .2, 1), left 1.7s cubic-bezier(.65, 0, .2, 1);
+}
+
+.shared-brand.to-game {
+  --brand-top: calc(clamp(16px, 3vh, 32px) + 6px);
+  --brand-left: clamp(16px, 3vw, 48px);
+}
+
+.shared-brand.is-down {
+  transition-delay: .35s;
+}
+
+.shared-brand:disabled {
+  cursor: default;
+}
+
+.shared-brand .menu-brand-orb {
+  position: relative;
+}
+
+@media (max-width: 390px) {
+  .shared-brand {
+    gap: 10px;
+  }
+
+  .shared-brand.to-menu {
+    --brand-left: 20px;
+  }
+}
+
+.game-topbar-actions,
+.game-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.game-chip {
+  display: inline-flex;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  border: 1px solid rgba(var(--teal), .26);
+  border-radius: 2px;
+  color: rgba(222, 240, 236, .86);
+  background: rgba(7, 26, 40, .5);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  cursor: pointer;
+  transition: border-color .2s, background .2s, color .2s, box-shadow .2s;
+}
+
+.game-chip-icon {
+  width: 38px;
+  padding: 0;
+}
+
+.game-chip:hover:not(:disabled),
+.game-chip:focus-visible {
+  border-color: rgba(var(--teal), .7);
+  color: #fff;
+  background: rgba(30, 90, 105, .45);
+  box-shadow: 0 0 18px rgba(var(--teal), .18);
+  outline: none;
+}
+
+.game-chip:disabled {
+  opacity: .38;
+  cursor: default;
+}
+
+.game-stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px clamp(12px, 3vw, 48px) clamp(14px, 3vh, 30px);
+}
+
+/* Everything above and below the board shares the board's width. */
+.game-hud,
+.game-statusbar,
+.game-board-frame {
+  width: min(94vw, calc((100svh - 245px) * var(--board-ratio, 1) + 40px), 1040px);
+}
+
+.game-hud {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.game-level {
+  display: grid;
+  gap: 10px;
+}
+
+.game-level-label {
+  color: rgb(var(--teal));
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .26em;
+  text-shadow: 0 0 16px rgba(var(--teal), .4);
+}
+
+.game-pips {
+  display: flex;
+  gap: 6px;
+}
+
+.game-pips i {
+  width: 26px;
+  height: 3px;
+  background: rgba(255, 255, 255, .16);
+}
+
+.game-pips i.is-done {
+  background: rgba(var(--teal), .5);
+}
+
+.game-pips i.is-current {
+  background: rgb(var(--teal));
+  box-shadow: 0 0 10px rgba(var(--teal), .75);
+}
+
+.game-timer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(var(--teal), .85);
+}
+
+.game-timer-text {
+  min-width: 5.6rem;
+  color: #f0f7f3;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(20px, 2.4vw, 28px);
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-shadow: 0 2px 18px rgba(9, 20, 29, .6);
+}
+
+.game-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(206, 233, 228, .7);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .22em;
+}
+
+.game-status-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.game-status-dots i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgb(var(--teal));
+  border-radius: 2px;
+  background: #0e4651;
+  box-shadow: 0 0 10px rgba(var(--neon), .8);
+}
+
+.game-status-feedback {
+  overflow: hidden;
+  color: #ffd27a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- Board ---------- */
+
+/* The frame itself is the menu panel's cut-corner double line (see BoardFrame). */
+.game-board-frame {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(14px, 1.9vw, 24px);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
+  clip-path: polygon(0 28px, 28px 0, calc(100% - 14px) 0, 100% 14px, 100% calc(100% - 28px), calc(100% - 28px) 100%, 14px 100%, 0 calc(100% - 14px));
+}
+
+.game-board-frame > .menu-panel-frame {
+  --edge: rgba(200, 240, 234, .82);
+}
+
+.game-view .board-grid {
+  --gap: 5px;
+  z-index: 1;
+}
+
+@media (min-width: 640px) {
+  .game-view .board-grid {
+    --gap: 7px;
+  }
+}
+
+.game-view .board-cell {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  background: none;
+}
+
+/* Tiles: open ones are translucent teal glass, painted ones are the ball's glowing trail.
+   Neighbours of the same kind reach across the grid gap and read as one shape, with a
+   pale outline around the edge and a faint grid line between tiles. */
+.board-tile {
+  position: absolute;
+  inset: 0;
+  border: 1px solid;
+  border-radius: 4px;
+}
+
+.board-tile.j-r { right: calc(var(--gap) * -1); border-right-width: 0; }
+.board-tile.j-b { bottom: calc(var(--gap) * -1); border-bottom-width: 0; }
+
+/* Fills the small square where four joined tiles meet. */
+.board-tile.j-d::after {
+  position: absolute;
+  right: calc(var(--gap) * -1);
+  bottom: calc(var(--gap) * -1);
+  width: var(--gap);
+  height: var(--gap);
+  background: inherit;
+  content: '';
+}
+
+/* Square off the corners that run into a neighbour. */
+.board-tile.j-t, .board-tile.j-l { border-top-left-radius: 0; }
+.board-tile.j-t, .board-tile.j-r { border-top-right-radius: 0; }
+.board-tile.j-b, .board-tile.j-r { border-bottom-right-radius: 0; }
+.board-tile.j-b, .board-tile.j-l { border-bottom-left-radius: 0; }
+
+.board-tile.is-open {
+  border-color: rgba(120, 214, 205, .26);
+  background: rgba(10, 30, 42, .5);
+}
+
+/* Between joined tiles only a faint grid line remains. */
+.board-tile.is-open.j-t { border-top-color: rgba(120, 214, 205, .09); }
+.board-tile.is-open.j-l { border-left-color: rgba(120, 214, 205, .09); }
+
+.board-tile.is-covered {
+  border-color: rgba(184, 244, 223, .85);
+  background: #0e4651;
+}
+
+.board-tile.is-covered.j-t { border-top-color: rgba(184, 244, 223, .2); }
+.board-tile.is-covered.j-l { border-left-color: rgba(184, 244, 223, .2); }
+
+/* A hair of overlap so no seam shows between painted tiles at fractional sizes. */
+.board-tile.is-covered.j-r { right: calc(var(--gap) * -1 - .6px); }
+.board-tile.is-covered.j-b { bottom: calc(var(--gap) * -1 - .6px); }
+.board-tile.is-covered.j-d::after { right: calc(var(--gap) * -1 - .6px); bottom: calc(var(--gap) * -1 - .6px); width: calc(var(--gap) + .6px); height: calc(var(--gap) + .6px); }
+
+/* The glow sits under every tile, so it never washes over a neighbouring painted tile. */
+.board-tile.is-covered::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 9px rgba(78, 243, 208, .5), 0 0 26px rgba(58, 188, 207, .3);
+  content: '';
+}
+
+.board-tile.is-covered.is-fresh {
+  animation: tile-paint .42s cubic-bezier(.3, .7, .4, 1) both;
+}
+
+.game-view .board-won .board-tile.is-covered {
+  animation: tile-celebrate .9s ease-out both;
+  animation-delay: calc(var(--wave) * 28ms);
+}
+
+/* Walls: the menu's crystal ruins, cut at the top and lit along one edge. */
+.game-view .board-wall-cell {
+  border: 1px solid rgba(112, 229, 225, .32);
+  border-radius: 0;
+  background: linear-gradient(120deg, rgba(38, 108, 132, .95), rgba(19, 54, 76, .95) 62%, rgba(7, 22, 34, .96));
+  box-shadow: inset 1px 0 0 rgba(199, 255, 237, .3), 0 0 18px rgba(58, 188, 207, .14);
+  clip-path: polygon(0 14%, 62% 0, 100% 20%, 100% 100%, 0 100%);
+}
+
+.game-view .board-wall-cell:nth-child(3n + 2) {
+  clip-path: polygon(0 22%, 40% 0, 100% 12%, 100% 100%, 0 100%);
+}
+
+.game-view .board-wall-cell:nth-child(3n) {
+  clip-path: polygon(0 8%, 74% 0, 100% 26%, 100% 100%, 0 100%);
+}
+
+/* The thin lit seam down the face. */
+.game-view .board-wall-face {
+  inset: 0 auto 0 18%;
+  width: 1px;
+  border: 0;
+  border-radius: 0;
+  clip-path: none;
+  background: linear-gradient(transparent, rgba(164, 255, 240, .5), transparent);
+  box-shadow: none;
+}
+
+/* The ball: the same red glass orb as the menu. */
+.game-view .board-player-ball {
+  border: 1px solid rgba(255, 224, 215, .92);
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, .96) 0 4%, rgba(255, 219, 198, .64) 10%, transparent 26%),
+    radial-gradient(circle at 35% 32%, rgba(255, 158, 149, .62), rgba(211, 38, 59, .5) 56%, rgba(40, 14, 32, .75) 100%);
+  box-shadow:
+    0 0 8px 2px rgba(255, 82, 83, .7),
+    0 0 22px 5px rgba(224, 41, 57, .38),
+    inset -4px -4px 9px rgba(37, 5, 23, .42),
+    inset 3px 3px 7px rgba(255, 230, 218, .5);
+}
+
+.game-view .board-player-ball::after {
+  display: none;
+}
+
+@keyframes tile-paint {
+  0% { opacity: .15; filter: brightness(2.4) saturate(.6); }
+  60% { opacity: 1; filter: brightness(1.6); }
+  100% { opacity: 1; filter: brightness(1); }
+}
+
+@keyframes tile-celebrate {
+  0%, 100% { filter: brightness(1); }
+  40% { filter: brightness(1.7) saturate(1.2); }
+}
+
+@media (max-width: 520px) {
+  .game-chip {
+    padding: 0 12px;
+    letter-spacing: .14em;
+  }
+
+  .shared-brand .menu-brand-name {
+    font-size: 15px;
+  }
+}
+
+/* ---------- Camera pan between the menu and the game ---------- */
+
+/* While travelling, the game sits above the menu and the camera moves between them. */
+.camera-up,
+.camera-down {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 200svh;
+  will-change: transform;
+}
+
+.camera-up > .duel-menu,
+.camera-down > .duel-menu {
+  height: 100svh;
+  min-height: 0;
+}
+
+.camera-up {
+  animation: camera-up 1.7s cubic-bezier(.65, 0, .2, 1) both;
+}
+
+.camera-down {
+  animation: camera-down 1.7s .35s cubic-bezier(.65, 0, .2, 1) both;
+}
+
+@keyframes camera-up {
+  from { transform: translateY(-100svh); }
+  to { transform: translateY(0); }
+}
+
+@keyframes camera-down {
+  from { transform: translateY(0); }
+  to { transform: translateY(-100svh); }
+}
+
+/* The menu's own content gets out of the way as the camera starts to rise. */
+.duel-menu:not(.game-view) > :not(.menu-atmosphere):not(.menu-grain) {
+  transition: opacity .45s ease, transform .6s cubic-bezier(.4, 0, .6, 1), filter .45s ease;
+}
+
+.duel-menu.is-leaving > :not(.menu-atmosphere):not(.menu-grain) {
+  opacity: 0;
+  transform: translateY(24px);
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+/* ---------- The sky above the menu ---------- */
+
+.sky-above-base {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 60% 40% at 18% 14%, rgba(36, 86, 120, .22), transparent 72%),
+    linear-gradient(180deg, #02060c 0%, #04101a 42%, #071421 100%);
+}
+
+/* Only the strip of mirrored menu sky next to the menu is kept, so the two skies meet
+   exactly; further up the sky is its own, darker night. */
+.sky-above-seam {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: linear-gradient(0deg, #000 0%, #000 6%, transparent 38%);
+  mask-image: linear-gradient(0deg, #000 0%, #000 6%, transparent 38%);
+}
+
+.sky-above-mirror {
+  position: absolute;
+  inset: 0;
+  transform: scaleY(-1);
+}
+
+/* Soft, cool haze: a pale moonlit patch high on the left and thin mist bands, blurred
+   and drifting slowly. Low contrast on purpose, so it reads as air and not a blob. */
+.sky-above-mist {
+  position: absolute;
+  inset: -6%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 30% 22% at 20% 20%, rgba(158, 214, 236, .15), transparent 70%),
+    radial-gradient(ellipse 22% 14% at 30% 26%, rgba(210, 238, 248, .07), transparent 70%),
+    radial-gradient(ellipse 70% 9% at 50% 66%, rgba(120, 196, 210, .06), transparent 74%),
+    radial-gradient(ellipse 55% 8% at 70% 82%, rgba(110, 180, 205, .05), transparent 74%);
+  filter: blur(28px);
+  animation: mist-drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes mist-drift {
+  from { transform: translate3d(-1.5%, 0, 0); }
+  to { transform: translate3d(2%, 1.2%, 0); }
+}
+
+.sky-above-stars {
+  position: absolute;
+  inset: 0;
+  opacity: .9;
+  background:
+    radial-gradient(1.2px 1.2px at 8% 12%, #e6f6ff, transparent),
+    radial-gradient(1px 1px at 17% 31%, #bfe9ff, transparent),
+    radial-gradient(1.6px 1.6px at 26% 8%, #ffffff, transparent),
+    radial-gradient(1px 1px at 34% 22%, #bfe9ff, transparent),
+    radial-gradient(1.2px 1.2px at 43% 14%, #e6f6ff, transparent),
+    radial-gradient(1px 1px at 52% 33%, #cdeeff, transparent),
+    radial-gradient(1.6px 1.6px at 61% 9%, #ffffff, transparent),
+    radial-gradient(1px 1px at 69% 26%, #bfe9ff, transparent),
+    radial-gradient(1.2px 1.2px at 77% 15%, #ffe9e0, transparent),
+    radial-gradient(1px 1px at 85% 36%, #cdeeff, transparent),
+    radial-gradient(1.6px 1.6px at 92% 11%, #ffffff, transparent),
+    radial-gradient(1px 1px at 14% 52%, #bfe9ff, transparent),
+    radial-gradient(1px 1px at 47% 47%, #e6f6ff, transparent),
+    radial-gradient(1.2px 1.2px at 73% 55%, #ffe9e0, transparent),
+    radial-gradient(1px 1px at 96% 48%, #bfe9ff, transparent);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 70%);
+  mask-image: linear-gradient(180deg, #000 0%, transparent 70%);
+}
+
+/* ---------- The game builds itself in once the camera lands ---------- */
+
+.game-topbar,
+.game-hud,
+.game-board-frame,
+.game-statusbar,
+.game-actions {
+  opacity: 0;
+  transition: opacity .35s ease, transform .35s ease, filter .35s ease;
+}
+
+.game-topbar,
+.game-hud {
+  transform: translateY(-14px);
+}
+
+.game-statusbar,
+.game-actions {
+  transform: translateY(14px);
+}
+
+.game-board-frame {
+  transform: scale(.94);
+  filter: blur(6px);
+}
+
+.game-view.is-live .game-topbar,
+.game-view.is-live .game-hud,
+.game-view.is-live .game-board-frame,
+.game-view.is-live .game-statusbar,
+.game-view.is-live .game-actions {
+  opacity: 1;
+  transform: none;
+  filter: none;
+  transition-duration: .8s;
+  transition-timing-function: cubic-bezier(.2, .8, .2, 1);
+}
+
+.game-view.is-live .game-topbar { transition-delay: .05s; }
+.game-view.is-live .game-hud { transition-delay: .12s; }
+.game-view.is-live .game-board-frame { transition-delay: .18s; }
+.game-view.is-live .game-statusbar { transition-delay: .35s; }
+.game-view.is-live .game-actions { transition-delay: .42s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .game-topbar,
+  .game-hud,
+  .game-board-frame,
+  .game-statusbar,
+  .game-actions {
+    transition: none;
+  }
+}

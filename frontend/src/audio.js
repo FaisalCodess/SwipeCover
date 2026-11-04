@@ -1,6 +1,9 @@
 const MUSIC_NOTES = [220, 247, 277, 330, 392, 330, 277, 247, 220, 196, 174, 196];
 const MUSIC_STEP_MS = 380;
 
+// Sound effects play this much higher than written (1.12 is about two semitones).
+const SFX_PITCH = 1.12;
+
 let context = null;
 
 function getContext() {
@@ -30,7 +33,7 @@ export function playTone(volume, frequency, { duration = 0.1, shape = 'sine', de
     const start = audio.currentTime + delay;
     const oscillator = audio.createOscillator();
     oscillator.type = shape;
-    oscillator.frequency.value = frequency;
+    oscillator.frequency.value = frequency * SFX_PITCH;
     oscillator.connect(envelope(audio, level * volume / 100, start, duration));
     oscillator.start(start);
     oscillator.stop(start + duration);
