@@ -1,29 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
-import ReactPlayer from 'react-player/youtube';
 
-export const MUSIC_VIDEO_ID = 'HUCjaaQR6cs';
-const MUSIC_URL = `https://www.youtube.com/watch?v=${MUSIC_VIDEO_ID}`;
+// Put your music file at frontend/public/music/background.mp3 (any format the browser can
+// play works; change the name here if you use .ogg, .m4a, etc.). If the file is missing or
+// cannot play, the game falls back to the built-in synth melody.
+export const MUSIC_URL = `${import.meta.env.BASE_URL}music/background.mp3`;
 
 // The track fades out over its last FADE_OUT_SECONDS, then starts again from the top
 // and fades in over FADE_IN_SECONDS.
 const FADE_OUT_SECONDS = 4;
 const FADE_IN_SECONDS = 4;
 const TICK_MS = 100;
-// YouTube volume (0-100) when the slider is at 100%. Lower this to make all music quieter.
-const MUSIC_MAX_PERCENT = 15;
+// Audio element volume (0-1) when the slider is at 100%. Lower this to make all music quieter.
+const MUSIC_MAX_VOLUME = 0.15;
 // Higher = quieter low end.
 const VOLUME_CURVE = 1.5;
 
-const PLAYER_CONFIG = {
-  playerVars: { playsinline: 1, controls: 0, disablekb: 1, fs: 0, modestbranding: 1, rel: 0 },
-};
-
-// Slider (0-100) -> YouTube volume percent (0-MUSIC_MAX_PERCENT, whole numbers only: the
-// YouTube API cannot go finer than 1%). Non-zero sliders never round down to silence.
-export function musicVolumePercent(slider) {
+// Slider (0-100) -> audio element volume (0-MUSIC_MAX_VOLUME).
+export function musicVolume(slider) {
   const level = Math.min(Math.max(slider, 0), 100) / 100;
-  if (level === 0) return 0;
-  return Math.max(1, Math.round(MUSIC_MAX_PERCENT * level ** VOLUME_CURVE));
+  return MUSIC_MAX_VOLUME * level ** VOLUME_CURVE;
 }
 
 // 'playing' = full level, 'out' = fading out at the end, 'in' = fading in from the start.
@@ -33,30 +28,46 @@ function fadeGain({ phase, progress }) {
   return 1;
 }
 
-// Plays the YouTube track as audio only. Mounted only after the first user gesture
-// (`unlocked`) so the browser's autoplay rules allow sound.
+// Plays the local music file. Mounted only after the first user gesture (`unlocked`)
+// so the browser's autoplay rules allow sound.
 export default function BackgroundMusic({ unlocked, playing, volume, onError }) {
   const [fade, setFade] = useState({ phase: 'playing', progress: 0 });
   const fadeRef = useRef(fade);
-  const playerRef = useRef(null);
-  const percentRef = useRef(0);
+  const audioRef = useRef(null);
 
-  const percent = Math.round(musicVolumePercent(volume) * fadeGain(fade));
-  percentRef.current = percent;
+  const level = Math.min(1, musicVolume(volume) * fadeGain(fade));
 
-  const internal = () => playerRef.current?.getInternalPlayer?.();
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio) audio.volume = level;
+  }, [level, unlocked]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) {
+      audio.play().catch((error) => {
+        // A blocked autoplay is retried on the next toggle; anything else means the file is unusable.
+        if (error?.name !== 'NotAllowedError' && error?.name !== 'AbortError') onError?.(error);
+      });
+    } else {
+      audio.pause();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playing, unlocked]);
 
   useEffect(() => {
     if (!unlocked || !playing) return undefined;
     let last = performance.now();
     const timer = window.setInterval(() => {
+      const audio = audioRef.current;
       const now = performance.now();
       const dt = Math.min(now - last, 250) / 1000;
       last = now;
       const next = { ...fadeRef.current };
       if (next.phase === 'playing') {
-        const duration = playerRef.current?.getDuration?.();
-        const time = playerRef.current?.getCurrentTime?.();
+        const duration = audio?.duration;
+        const time = audio?.currentTime;
         if (!(duration > FADE_OUT_SECONDS * 2 && time > 0 && duration - time <= FADE_OUT_SECONDS)) return;
         next.phase = 'out';
         next.progress = 0;
@@ -79,9 +90,11 @@ export default function BackgroundMusic({ unlocked, playing, volume, onError }) 
 
   // Silent by now: jump back to the start and begin fading in.
   function restart(next) {
-    const player = internal();
-    player?.seekTo?.(0, true);
-    player?.playVideo?.();
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    }
     next.phase = 'in';
     next.progress = 0;
   }
@@ -99,32 +112,12 @@ export default function BackgroundMusic({ unlocked, playing, volume, onError }) 
   };
 
   return (
-    <div
-      aria-hidden="true"
-      style={{
-        position: 'fixed',
-        right: 0,
-        bottom: 0,
-        width: 1,
-        height: 1,
-        overflow: 'hidden',
-        opacity: 0,
-        pointerEvents: 'none',
-      }}
-    >
-      <ReactPlayer
-        ref={playerRef}
-        url={MUSIC_URL}
-        playing={playing}
-        volume={percent / 100}
-        width="1px"
-        height="1px"
-        config={{ youtube: PLAYER_CONFIG }}
-        onReady={() => internal()?.setVolume?.(percentRef.current)}
-        onPlay={() => internal()?.setVolume?.(percentRef.current)}
-        onEnded={handleEnded}
-        onError={onError}
-      />
-    </div>
+    <audio
+      ref={audioRef}
+      src={MUSIC_URL}
+      preload="auto"
+      onEnded={handleEnded}
+      onError={onError}
+    />
   );
 }

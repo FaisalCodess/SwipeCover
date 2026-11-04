@@ -90,6 +90,13 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
   retried on the next visit.
 - Before launch, consider adding a word filter for player names.
 
+## Background music
+
+The music is a local file, not a stream. Put your track at
+`frontend/public/music/background.mp3` (use only music you have the rights to). If you
+use another format or name, update `MUSIC_URL` in `frontend/src/BackgroundMusic.jsx`.
+If the file is missing or cannot play, the game falls back to a built-in synth melody.
+
 ## Controls
 
 Swipe on the board, use the on-screen pad, or the keyboard:
