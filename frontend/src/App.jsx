@@ -663,7 +663,7 @@ export default function App() {
   }, [audioUnlocked]);
 
   useEffect(() => {
-    // The YouTube track is the main music; the synth melody is only a fallback if it cannot load.
+    // The local music file is the main music; the synth melody is only a fallback if it cannot load.
     if (!settings.music || !audioUnlocked || !musicFailed) return undefined;
     return startMusic(() => settingsRef.current.musicVolume);
   }, [audioUnlocked, musicFailed, settings.music]);
