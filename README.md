@@ -12,6 +12,16 @@ to clear the level.
 - Python 3.10 or newer
 - Node.js 18 or newer and npm
 
+## Run with Docker
+
+```bash
+docker compose up --build
+```
+
+Open <http://localhost:8000/>. The first run builds the image; after that
+`docker compose up` is enough (add `--build` again after changing code). The
+leaderboard is kept in the `scores` Docker volume, so it survives restarts.
+
 ## Develop
 
 Start the game server (PowerShell, from the repository root):

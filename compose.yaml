@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Keeps the global leaderboard between restarts and rebuilds.
+      - scores:/data
+    restart: unless-stopped
+
+volumes:
+  scores:
