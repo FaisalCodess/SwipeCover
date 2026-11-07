@@ -272,6 +272,19 @@
   text-shadow: 0 0 16px rgba(var(--teal), .4);
 }
 
+/* Replays are not on the leaderboard; the tag says so without shouting. */
+.game-practice-tag {
+  margin-left: 12px;
+  padding: 2px 7px 2px 9px;
+  border: 1px solid rgba(255, 255, 255, .26);
+  color: rgba(231, 243, 241, .72);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: .22em;
+  text-shadow: none;
+  vertical-align: 1px;
+}
+
 .game-pips {
   display: flex;
   gap: 6px;

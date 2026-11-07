@@ -80,12 +80,13 @@ def count_dots(board: Board) -> int:
 
 def slide(board: Board, player: Position, direction: str) -> tuple[Position, bool]:
     row_step, col_step = DIRECTIONS[direction]
+    rows, cols = len(board), len(board[0])
     row, col = player
     moved = False
 
     while True:
         next_row, next_col = row + row_step, col + col_step
-        if not (0 <= next_row < ROWS and 0 <= next_col < COLS):
+        if not (0 <= next_row < rows and 0 <= next_col < cols):
             break
         if board[next_row][next_col] == "|":
             break
@@ -97,23 +98,24 @@ def slide(board: Board, player: Position, direction: str) -> tuple[Position, boo
     return (row, col), moved
 
 
-def _bit(position: Position) -> int:
-    return 1 << (position[0] * COLS + position[1])
+def _bit(position: Position, cols: int) -> int:
+    return 1 << (position[0] * cols + position[1])
 
 
 def _slide_edges(board: Board) -> dict[Position, list[tuple[Position, int]]]:
     """Every open cell mapped to the (destination, covered cells) of each possible slide."""
+    rows, cols = len(board), len(board[0])
     edges: dict[Position, list[tuple[Position, int]]] = {}
-    for row in range(ROWS):
-        for col in range(COLS):
+    for row in range(rows):
+        for col in range(cols):
             if board[row][col] == "|":
                 continue
             moves = []
             for row_step, col_step in DIRECTIONS.values():
                 next_row, next_col = row + row_step, col + col_step
                 path = 0
-                while 0 <= next_row < ROWS and 0 <= next_col < COLS and board[next_row][next_col] != "|":
-                    path |= _bit((next_row, next_col))
+                while 0 <= next_row < rows and 0 <= next_col < cols and board[next_row][next_col] != "|":
+                    path |= _bit((next_row, next_col), cols)
                     next_row += row_step
                     next_col += col_step
                 if path:
@@ -136,11 +138,12 @@ def analyze(board: Board, start: Position) -> Analysis:
     when some path through the component DAG covers every dot.
     """
     edges = _slide_edges(board)
+    rows, cols = len(board), len(board[0])
     dots = 0
-    for row in range(ROWS):
-        for col in range(COLS):
+    for row in range(rows):
+        for col in range(cols):
             if board[row][col] == ".":
-                dots |= _bit((row, col))
+                dots |= _bit((row, col), cols)
 
     # Tarjan's SCC algorithm over the positions reachable from the start.
     index_of: dict[Position, int] = {}
@@ -194,29 +197,31 @@ def analyze(board: Board, start: Position) -> Analysis:
         failed.add((component, covered))
         return False
 
-    return Analysis(search(component_of[start], _bit(start)), component_count)
+    return Analysis(search(component_of[start], _bit(start, cols)), component_count)
 
 
-def _constructed_board(rng: SeededRandom) -> tuple[Board, Position]:
+def _constructed_board(
+    rng: SeededRandom, rows: int, cols: int, max_steps: int, stopper_budget: int
+) -> tuple[Board, Position]:
     """Build a board around a random solution walk, so it is solvable by construction.
 
     A stopper wall is only ever placed on a cell the walk has not touched, so it
     never changes an earlier slide. Cells the walk never reaches become walls.
     """
-    start = (rng.randrange(ROWS), rng.randrange(COLS))
+    start = (rng.randrange(rows), rng.randrange(cols))
     walls: set[Position] = set()
     visited = {start}
     player = start
     idle_steps = 0
 
-    for _ in range(WALK_MAX_STEPS):
+    for _ in range(max_steps):
         options = []
         for row_step, col_step in DIRECTIONS.values():
             row, col = player
             path = []
             while True:
                 row, col = row + row_step, col + col_step
-                if not (0 <= row < ROWS and 0 <= col < COLS) or (row, col) in walls:
+                if not (0 <= row < rows and 0 <= col < cols) or (row, col) in walls:
                     break
                 path.append((row, col))
 
@@ -226,7 +231,7 @@ def _constructed_board(rng: SeededRandom) -> tuple[Board, Position]:
                 beyond = (cell[0] + row_step, cell[1] + col_step)
                 if index == len(path) - 1:
                     options.append((path[: index + 1], None, new_cells))
-                elif beyond not in visited and len(walls) < WALK_STOPPER_BUDGET:
+                elif beyond not in visited and len(walls) < stopper_budget:
                     options.append((path[: index + 1], beyond, new_cells))
 
         if not options:
@@ -240,19 +245,21 @@ def _constructed_board(rng: SeededRandom) -> tuple[Board, Position]:
         if idle_steps >= 5:
             break
 
-    board = [["." if (row, col) in visited else "|" for col in range(COLS)] for row in range(ROWS)]
+    board = [["." if (row, col) in visited else "|" for col in range(cols)] for row in range(rows)]
     board[start[0]][start[1]] = "P"
     return board, start
 
 
-@lru_cache(maxsize=32)
-def _daily_map(day: str, level: int) -> tuple[tuple[str, ...], Position]:
-    rules = LEVEL_RULES[level]
-    rng = SeededRandom(f"swipe-cover:{day}:{level}")
+def _find_board(seed: str, rules: dict) -> tuple[tuple[str, ...], Position]:
+    """Draw boards from the seed until one is solvable and fits the rules.
+
+    Falls back to the first solvable board that fit the wall limits, so it always returns something.
+    """
+    rng = SeededRandom(seed)
     fallback = None
 
-    for _ in range(MAX_GENERATION_ATTEMPTS):
-        board, start = _constructed_board(rng)
+    for _ in range(rules["attempts"]):
+        board, start = _constructed_board(rng, rules["rows"], rules["cols"], rules["steps"], rules["stoppers"])
         walls = sum(row.count("|") for row in board)
         if not rules["walls"][0] <= walls <= rules["walls"][1]:
             continue
@@ -269,10 +276,76 @@ def _daily_map(day: str, level: int) -> tuple[tuple[str, ...], Position]:
     return tuple("".join(row) for row in board), start
 
 
+@lru_cache(maxsize=32)
+def _daily_map(day: str, level: int) -> tuple[tuple[str, ...], Position]:
+    rules = {
+        **LEVEL_RULES[level],
+        "rows": ROWS,
+        "cols": COLS,
+        "steps": WALK_MAX_STEPS,
+        "stoppers": WALK_STOPPER_BUDGET,
+        "attempts": MAX_GENERATION_ATTEMPTS,
+    }
+    return _find_board(f"swipe-cover:{day}:{level}", rules)
+
+
 def generate_map(level: int, day: str | None = None) -> tuple[Board, Position]:
     """The board for a level is the same for every player on a given day."""
     rows, start = _daily_map(day or current_day_key(), level)
     return [list(row) for row in rows], start
+
+
+# ---- Swipe Rush ----------------------------------------------------------------
+# Five minutes, as many boards as you can clear. Every player gets the same endless
+# sequence each day, in the same order, so board N is a pure function of (day, N).
+#
+# The boards are small and quick, and get bigger and trickier as the run goes on.
+# `steps` is the length of the random solution walk a board is built around, so the
+# shortest solution is about that many moves; the table is the difficulty dial.
+# Mirrored exactly in frontend/src/generator.js (RUSH_TIERS there).
+RUSH_SECONDS = 300
+# No run gets anywhere near this many boards; it just bounds what the server will replay.
+MAX_RUSH_MAPS = 150
+RUSH_ATTEMPTS = 400
+RUSH_TIERS = (
+    # (first board index, rules for the boards from there on)
+    (0, {"rows": 4, "cols": 5, "steps": 4, "stoppers": 2, "walls": (5, 10), "zones": (1, 1)}),
+    (2, {"rows": 5, "cols": 6, "steps": 5, "stoppers": 3, "walls": (9, 16), "zones": (1, 1)}),
+    (5, {"rows": 5, "cols": 7, "steps": 6, "stoppers": 4, "walls": (10, 20), "zones": (1, 1)}),
+    (9, {"rows": 5, "cols": 7, "steps": 7, "stoppers": 4, "walls": (10, 20), "zones": (1, 2)}),
+    (14, {"rows": 6, "cols": 8, "steps": 8, "stoppers": 5, "walls": (14, 28), "zones": (1, 2)}),
+    (20, {"rows": 6, "cols": 8, "steps": 10, "stoppers": 6, "walls": (14, 30), "zones": (2, 3)}),
+    (28, {"rows": 7, "cols": 9, "steps": 12, "stoppers": 7, "walls": (18, 36), "zones": (2, 4)}),
+)
+
+
+def rush_rules(index: int) -> dict:
+    rules = [tier for first, tier in RUSH_TIERS if first <= index][-1]
+    return {**rules, "attempts": RUSH_ATTEMPTS}
+
+
+@lru_cache(maxsize=2048)
+def _rush_map(day: str, index: int) -> tuple[tuple[str, ...], Position]:
+    return _find_board(f"swipe-cover:rush:{day}:{index}", rush_rules(index))
+
+
+def generate_rush_map(index: int, day: str | None = None) -> tuple[Board, Position]:
+    """Board number `index` (from 0) of a day's Swipe Rush: the same for every player."""
+    rows, start = _rush_map(day or current_day_key(), index)
+    return [list(row) for row in rows], start
+
+
+def solves(board: Board, start: Position, route: list[str]) -> bool:
+    """True when every move slides the ball and the last one covers the final square."""
+    board = [row[:] for row in board]
+    position = start
+    for step, direction in enumerate(route):
+        position, moved = slide(board, position, direction)
+        if not moved:
+            return False
+        if count_dots(board) == 0:
+            return step == len(route) - 1
+    return False
 
 
 @dataclass

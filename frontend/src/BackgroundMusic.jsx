@@ -15,6 +15,15 @@ const MUSIC_MAX_VOLUME = 0.15;
 // Higher = quieter low end.
 const VOLUME_CURVE = 1.5;
 
+// Swipe Rush turns the track up. `intensity` is 0 as recorded, 1 in Swipe Rush, 2 for its last
+// minute. The track plays faster, and its pitch rises with the speed, like a tape being rushed:
+// that is what makes it feel urgent. The speed glides there over a second or two, so entering
+// the cave sounds like a riser, and leaving it eases back to the original.
+// To tune the feel, change these numbers (1 = original speed).
+const RATE_BY_INTENSITY = [1, 1.1, 1.17];
+const RATE_STEP = 0.004; // per 50 ms
+const RUSH_VOLUME_BOOST = 1.25;
+
 // Slider (0-100) -> audio element volume (0-MUSIC_MAX_VOLUME).
 export function musicVolume(slider) {
   const level = Math.min(Math.max(slider, 0), 100) / 100;
@@ -30,17 +39,41 @@ function fadeGain({ phase, progress }) {
 
 // Plays the local music file. Mounted only after the first user gesture (`unlocked`)
 // so the browser's autoplay rules allow sound.
-export default function BackgroundMusic({ unlocked, playing, volume, onError }) {
+export default function BackgroundMusic({ unlocked, playing, volume, intensity = 0, onError }) {
   const [fade, setFade] = useState({ phase: 'playing', progress: 0 });
   const fadeRef = useRef(fade);
   const audioRef = useRef(null);
 
-  const level = Math.min(1, musicVolume(volume) * fadeGain(fade));
+  const level = Math.min(1, musicVolume(volume) * fadeGain(fade) * (intensity > 0 ? RUSH_VOLUME_BOOST : 1));
 
   useEffect(() => {
     const audio = audioRef.current;
     if (audio) audio.volume = level;
   }, [level, unlocked]);
+
+  // Glides the playback speed to where this intensity wants it.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+    const target = RATE_BY_INTENSITY[Math.min(intensity, RATE_BY_INTENSITY.length - 1)];
+    const keepPitch = (keep) => {
+      audio.preservesPitch = keep;
+      audio.mozPreservesPitch = keep;
+      audio.webkitPreservesPitch = keep;
+    };
+    if (target > 1) keepPitch(false);
+    const timer = window.setInterval(() => {
+      const gap = target - audio.playbackRate;
+      if (Math.abs(gap) <= RATE_STEP) {
+        audio.playbackRate = target;
+        if (target === 1) keepPitch(true);
+        window.clearInterval(timer);
+        return;
+      }
+      audio.playbackRate += Math.sign(gap) * RATE_STEP;
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, [intensity, unlocked]);
 
   useEffect(() => {
     const audio = audioRef.current;

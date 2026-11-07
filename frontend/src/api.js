@@ -27,10 +27,17 @@ export async function fetchLeaderboard(level, playerId, signal) {
   return response.json();
 }
 
+export async function fetchRushLeaderboard(playerId, signal) {
+  const response = await fetch(`${API_URL}/rush/leaderboard`, { signal, headers: { 'X-Player-Id': playerId } });
+  if (!response.ok) throw new Error(`Leaderboard responded with ${response.status}.`);
+  return response.json();
+}
+
 async function postScore(score) {
   let response;
   try {
-    response = await fetch(`${API_URL}/scores`, {
+    // A Swipe Rush run carries a route per board (`routes`); a daily level carries one `route`.
+    response = await fetch(`${API_URL}/${score.routes ? 'rush/scores' : 'scores'}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(score),

@@ -1,12 +1,16 @@
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUpRight, Gamepad2, LoaderCircle, LockKeyhole, Settings, Trophy, User, X } from 'lucide-react';
-import { fetchLeaderboard } from './api.js';
+import { ArrowUpRight, Check, Gamepad2, LoaderCircle, LockKeyhole, Settings, Trophy, User, X, Zap } from 'lucide-react';
+import { fetchLeaderboard, fetchRushLeaderboard } from './api.js';
 import { getTimeUntilAmmanReset } from './dailyReset.js';
-import { sounds } from './audio.js';
+import { sounds, vibrate } from './audio.js';
 import { KEY_BINDINGS } from './controls.js';
+import { formatRushClock } from './rush.js';
+
+const LEVEL_NUMBERS = [1, 2, 3];
 
 const MENU_ITEMS = [
   { id: 'play', label: 'PLAY', icon: Gamepad2 },
+  { id: 'rush', label: 'SWIPE RUSH', icon: Zap },
   { id: 'settings', label: 'SETTINGS', icon: Settings },
   { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
 ];
@@ -19,7 +23,7 @@ function formatCountdown(milliseconds) {
   return [hours, minutes, seconds].map((unit) => String(unit).padStart(2, '0')).join(':');
 }
 
-function createMotes(width, height) {
+function createMotes(width, height, hues) {
   const amount = Math.min(100, Math.max(38, Math.round(width * height / 15000)));
   return Array.from({ length: amount }, () => ({
     x: Math.random() * width,
@@ -27,7 +31,7 @@ function createMotes(width, height) {
     radius: Math.random() * 1.6 + 0.45,
     speed: Math.random() * 0.26 + 0.08,
     phase: Math.random() * Math.PI * 2,
-    hue: Math.random() > 0.56 ? 354 : 192,
+    hue: Math.random() > 0.56 ? hues[0] : hues[1],
     alpha: Math.random() * 0.48 + 0.2,
     length: Math.random() * 16 + 8,
   }));
@@ -49,13 +53,17 @@ function createGlowSprite(hue) {
   return sprite;
 }
 
-function EmberField() {
+// Drifting sparks. `hues` are the two colours (red and cyan in the sky; ember orange in the
+// cave), and `rise` scales how fast they climb, so the cave can speed them up as time runs out.
+export function EmberField({ hues = [354, 192], rise = 1 }) {
   const canvasRef = useRef(null);
+  const riseRef = useRef(rise);
+  riseRef.current = rise;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-    const glowSprites = { 354: createGlowSprite(354), 192: createGlowSprite(192) };
+    const glowSprites = Object.fromEntries(hues.map((hue) => [hue, createGlowSprite(hue)]));
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     let frame;
     let width = 0;
@@ -71,7 +79,7 @@ function EmberField() {
       canvas.width = Math.round(width * pixelRatio);
       canvas.height = Math.round(height * pixelRatio);
       context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      motes = createMotes(width, height);
+      motes = createMotes(width, height, hues);
       draw(0, true);
     }
 
@@ -85,7 +93,7 @@ function EmberField() {
 
       for (const mote of motes) {
         const drift = staticFrame ? 0 : Math.sin(timestamp * 0.00035 + mote.phase) * 0.22;
-        const verticalDrift = staticFrame ? 0 : mote.speed * 0.45;
+        const verticalDrift = staticFrame ? 0 : mote.speed * 0.45 * riseRef.current;
         const x = mote.x + drift;
         const y = mote.y;
         const gradient = context.createLinearGradient(x, y, x - mote.length * 0.6, y + mote.length);
@@ -170,7 +178,9 @@ function CrystalRange() {
   );
 }
 
-export function MenuAtmosphere({ remainingLevels }) {
+// The animated backdrop. `children` (the level orbs) sit at mid depth, so they drift with the
+// parallax and sit behind the mountains like the rest of the scenery.
+export function MenuAtmosphere({ children }) {
   const root = useRef(null);
   const animationFrame = useRef(0);
 
@@ -236,27 +246,7 @@ export function MenuAtmosphere({ remainingLevels }) {
         <div className="menu-ruin menu-ruin-center" />
         <div className="menu-ruin menu-ruin-right" />
       </div>
-      <div className="menu-depth menu-depth-mid">
-        {remainingLevels.length > 0 && (
-          <div
-            className="menu-level-orbits"
-            data-orb-count={remainingLevels.length}
-            aria-hidden="true"
-          >
-            <div className="menu-orbit-backplate" />
-            {remainingLevels.map((level, index) => (
-              <span
-                key={level}
-                data-level-orb={level}
-                className="menu-orb-position"
-                style={{ '--orb-angle': `${index * 360 / remainingLevels.length}deg` }}
-              >
-                <span className="menu-level-orb" />
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
+      <div className="menu-depth menu-depth-mid">{children}</div>
       <CrystalRange />
       <div className="menu-vignette" />
       <EmberField />
@@ -548,7 +538,7 @@ function BoardRow({ entry, best }) {
         {entry.you && <small className="menu-board-you">YOU</small>}
       </span>
       <span className="menu-board-moves">
-        {entry.moves} moves
+        {entry.maps === undefined ? `${entry.moves} moves` : `${entry.maps} ${entry.maps === 1 ? 'map' : 'maps'}`}
         {best && <small>BEST</small>}
       </span>
       <span className="menu-board-time">{formatMenuTime(entry.time_ms)}</span>
@@ -556,18 +546,25 @@ function BoardRow({ entry, best }) {
   );
 }
 
-// Today's global top 10 per level. Without the server it falls back to this device's times.
-function LeaderboardContent({ levelScores, player }) {
+// The tabs: the three daily levels, then Swipe Rush.
+const BOARD_TABS = [1, 2, 3, 'rush'];
+
+// Today's global top 10 per level, and for Swipe Rush. Without the server it falls back to this device's own first run.
+function LeaderboardContent({ levelScores, player, rush }) {
   const [activeLevel, setActiveLevel] = useState(() => (
     [3, 2, 1].find((level) => levelScores?.[level]?.length) || 1
   ));
   const [boards, setBoards] = useState({});
   const board = boards[activeLevel];
+  const isRush = activeLevel === 'rush';
 
   useEffect(() => {
     const controller = new AbortController();
     setBoards((previous) => ({ ...previous, [activeLevel]: { ...previous[activeLevel], status: previous[activeLevel]?.entries ? 'ready' : 'loading' } }));
-    fetchLeaderboard(activeLevel, player.id, controller.signal)
+    const request = activeLevel === 'rush'
+      ? fetchRushLeaderboard(player.id, controller.signal)
+      : fetchLeaderboard(activeLevel, player.id, controller.signal);
+    request
       .then((data) => setBoards((previous) => ({ ...previous, [activeLevel]: { status: 'ready', entries: data.entries, you: data.you } })))
       .catch((error) => {
         if (!controller.signal.aborted) {
@@ -579,7 +576,12 @@ function LeaderboardContent({ levelScores, player }) {
   }, [activeLevel, player.id]);
 
   let entries = board?.entries || [];
-  if (board?.status === 'offline') {
+  if (board?.status === 'offline' && isRush) {
+    const result = rush?.status === 'finished' ? rush.result : null;
+    entries = result?.maps > 0
+      ? [{ rank: 1, name: player.name || 'You', maps: result.maps, moves: result.moves, time_ms: result.time, you: true }]
+      : [];
+  } else if (board?.status === 'offline') {
     entries = (levelScores?.[activeLevel] || [])
       .filter((entry) => Number.isFinite(entry?.time))
       .sort((left, right) => left.time - right.time)
@@ -587,23 +589,23 @@ function LeaderboardContent({ levelScores, player }) {
       .map((entry, index) => ({ rank: index + 1, name: player.name || 'You', moves: entry.moves, time_ms: entry.time, you: true }));
   }
 
-  let footer = player.name ? `PLAYING AS ${player.name.toUpperCase()}` : 'FINISH A LEVEL TO JOIN';
+  let footer = player.name ? `PLAYING AS ${player.name.toUpperCase()}` : `FINISH ${isRush ? 'A RUSH' : 'A LEVEL'} TO JOIN`;
   if (board?.status === 'offline') footer = 'OFFLINE · SHOWING THIS DEVICE';
 
   return (
     <>
-      <div className="menu-board-tabs menu-panel-item" role="tablist" aria-label="Leaderboard level" style={{ '--i': 1 }}>
-        {[1, 2, 3].map((level) => (
+      <div className="menu-board-tabs menu-panel-item" role="tablist" aria-label="Leaderboard" style={{ '--i': 1 }}>
+        {BOARD_TABS.map((tab) => (
           <button
             type="button"
-            key={level}
+            key={tab}
             role="tab"
-            aria-selected={activeLevel === level}
+            aria-selected={activeLevel === tab}
             aria-controls="menu-board-list"
-            className={`menu-board-tab ${activeLevel === level ? 'is-active' : ''}`}
-            onClick={() => setActiveLevel(level)}
+            className={`menu-board-tab ${activeLevel === tab ? 'is-active' : ''} ${tab === 'rush' ? 'is-rush' : ''}`}
+            onClick={() => setActiveLevel(tab)}
           >
-            Level {level}
+            {tab === 'rush' ? 'Rush' : `Level ${tab}`}
           </button>
         ))}
       </div>
@@ -613,7 +615,7 @@ function LeaderboardContent({ levelScores, player }) {
         id="menu-board-list"
         className="menu-board-list menu-panel-item"
         role="tabpanel"
-        aria-label={`Level ${activeLevel} top times`}
+        aria-label={isRush ? 'Swipe Rush top runs' : `Level ${activeLevel} top times`}
         aria-busy={board?.status === 'loading' || !board}
         style={{ '--i': 2 }}
       >
@@ -632,8 +634,8 @@ function LeaderboardContent({ levelScores, player }) {
           <div className="menu-board-empty">
             {board?.status === 'ready' || board?.status === 'offline' ? (
               <>
-                <span>NO TIMES YET</span>
-                <p>Be the first to finish level {activeLevel} today.</p>
+                <span>{isRush ? 'NO RUNS YET' : 'NO TIMES YET'}</span>
+                <p>{isRush ? 'Be the first to set a Swipe Rush score today.' : `Be the first to finish level ${activeLevel} today.`}</p>
               </>
             ) : (
               <span className="menu-board-loading"><LoaderCircle className="menu-spin" size={15} /> LOADING</span>
@@ -643,7 +645,7 @@ function LeaderboardContent({ levelScores, player }) {
       </div>
 
       <div className="menu-board-footer menu-panel-item" style={{ '--i': 3 }}>
-        <span>TODAY · TOP 10</span>
+        <span>TODAY · FIRST RUNS</span>
         <span className={board?.status === 'offline' ? 'is-offline' : ''}>{footer}</span>
       </div>
     </>
@@ -660,25 +662,176 @@ function formatMenuTime(milliseconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
 }
 
+// How long the "locked" message stays up after a level is turned away.
+const REFUSAL_MS = 2800;
+
+// A level opens once every level before it has been cleared. A cleared level stays open for replays.
+function isOpen(level, cleared) {
+  return cleared.includes(level) || LEVEL_NUMBERS.every((earlier) => earlier >= level || cleared.includes(earlier));
+}
+
+// The first level still to clear before this one: the one the player should go and play.
+function blockerOf(level, cleared) {
+  return LEVEL_NUMBERS.find((earlier) => earlier < level && !cleared.includes(earlier));
+}
+
+// What the readout in the middle of the ring says about the level being pointed at.
+function readoutFor({ refusal, hovered, cleared, firstRuns }) {
+  if (refusal) {
+    return {
+      key: `refused-${refusal.id}`,
+      tone: 'warn',
+      kicker: `LEVEL ${refusal.level} · LOCKED`,
+      title: `CLEAR LEVEL ${refusal.blocker} FIRST`,
+    };
+  }
+  if (hovered) {
+    const key = `level-${hovered}`;
+    if (cleared.includes(hovered)) {
+      const time = firstRuns[hovered]?.[0]?.time;
+      return {
+        key,
+        kicker: `LEVEL ${hovered} · CLEARED`,
+        title: Number.isFinite(time) ? formatMenuTime(time) : 'CLEARED',
+        detail: 'PRESS TO REPLAY',
+      };
+    }
+    if (isOpen(hovered, cleared)) return { key, kicker: `LEVEL ${hovered}`, title: 'READY', detail: 'PRESS TO PLAY' };
+    return { key, kicker: `LEVEL ${hovered}`, title: 'LOCKED' };
+  }
+  return {
+    key: 'idle',
+    kicker: 'DAILY LEVELS',
+    title: `${cleared.length} / ${LEVEL_NUMBERS.length}`,
+    detail: cleared.length === LEVEL_NUMBERS.length ? 'REPLAY ANY LEVEL' : 'PICK A LEVEL',
+  };
+}
+
+// The three daily levels, as orbs circling above the mountains: red while still to clear, grey once
+// cleared. Pressing one plays it; a cleared one can be replayed for fun. A level that is not open yet
+// turns the player away gently: the orb recoils, a low two-note sound plays, a message appears in the
+// middle of the ring and the level they should play first beckons with a pulse.
+function LevelOrbs({ cleared, firstRuns, disabled, onPlay, onRefuse }) {
+  const [hovered, setHovered] = useState(null);
+  const [refusal, setRefusal] = useState(null);
+  const refusalTimer = useRef(null);
+  const nextLevel = LEVEL_NUMBERS.find((level) => !cleared.includes(level));
+
+  useEffect(() => () => window.clearTimeout(refusalTimer.current), []);
+
+  function press(level) {
+    if (disabled) return;
+    if (isOpen(level, cleared)) {
+      onPlay(level);
+      return;
+    }
+    window.clearTimeout(refusalTimer.current);
+    setRefusal((previous) => ({ level, blocker: blockerOf(level, cleared), id: (previous?.id ?? 0) + 1 }));
+    refusalTimer.current = window.setTimeout(() => setRefusal(null), REFUSAL_MS);
+    onRefuse();
+  }
+
+  const readout = readoutFor({ refusal, hovered, cleared, firstRuns });
+
+  return (
+    <div className="menu-level-stage" role="group" aria-label="Daily levels" data-all-cleared={nextLevel === undefined}>
+      <div className="menu-level-orbits">
+        <div className="menu-orbit-backplate" />
+        {LEVEL_NUMBERS.map((level, index) => {
+          const state = cleared.includes(level) ? 'cleared' : isOpen(level, cleared) ? 'open' : 'locked';
+          const refused = refusal?.level === level;
+          // Remounting on each refusal restarts the CSS animations, even on repeated presses.
+          const attempt = refused ? refusal.id : 0;
+          let label = `Play level ${level}`;
+          if (state === 'cleared') label = `Level ${level}, cleared. Replay it for fun`;
+          if (state === 'locked') label = `Level ${level}, locked. Clear level ${blockerOf(level, cleared)} first`;
+          return (
+            <span key={level} className="menu-orb-position" style={{ '--orb-angle': `${index * 120}deg` }}>
+              <button
+                type="button"
+                className={`menu-level-button is-${state} ${level === nextLevel ? 'is-next' : ''} ${refusal?.blocker === level ? 'is-hinted' : ''}`}
+                aria-label={label}
+                aria-disabled={disabled || state === 'locked'}
+                onClick={() => press(level)}
+                onPointerEnter={() => setHovered(level)}
+                onPointerLeave={() => setHovered(null)}
+                onFocus={(event) => event.currentTarget.matches(':focus-visible') && setHovered(level)}
+                onBlur={() => setHovered(null)}
+              >
+                <span key={`orb-${attempt}`} className={`menu-level-orb ${refused ? 'is-refused' : ''}`} />
+                <span key={`ring-${attempt}`} className={`menu-orb-ring ${refused ? 'is-refused' : ''}`} />
+                {/* Turns against the ring, so the number stays upright as the ring slowly spins. */}
+                <span className="menu-orb-upright">
+                  <span key={`face-${attempt}`} className={`menu-orb-face ${refused ? 'is-refused' : ''}`}>
+                    {refused ? <LockKeyhole size={15} strokeWidth={1.8} /> : level}
+                    {state === 'cleared' && !refused && (
+                      <span className="menu-orb-badge"><Check size={9} strokeWidth={3.4} /></span>
+                    )}
+                  </span>
+                </span>
+              </button>
+            </span>
+          );
+        })}
+      </div>
+
+      <div className={`menu-level-readout ${readout.tone ? `is-${readout.tone}` : ''}`} aria-hidden="true">
+        <div key={readout.key} className="menu-level-readout-body">
+          {readout.tone === 'warn' && <LockKeyhole className="menu-readout-lock" size={15} strokeWidth={1.6} />}
+          <small>{readout.kicker}</small>
+          <strong>{readout.title}</strong>
+          {readout.detail && <em>{readout.detail}</em>}
+        </div>
+      </div>
+      <p className="sr-only" role="status">
+        {refusal ? `Level ${refusal.level} is locked. Clear level ${refusal.blocker} first.` : ''}
+      </p>
+    </div>
+  );
+}
+
 const PANEL_TITLES = { settings: 'Settings', leaderboard: 'Global Leaderboard' };
 
-export default function MainMenu({ onPlay, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], status, error }) {
+// The line under SWIPE RUSH: what pressing it will do today.
+function rushNote(rush, now) {
+  if (rush.status === 'running') return `RESUME · ${formatRushClock(rush.endsAt - now)} LEFT`;
+  if (rush.status === 'finished') {
+    const { maps } = rush.result;
+    return maps > 0 ? `FIRST RUN · ${maps} ${maps === 1 ? 'MAP' : 'MAPS'}` : 'FIRST RUN · NO MAPS';
+  }
+  return '5 MIN · FIRST RUN COUNTS';
+}
+
+export default function MainMenu({ onPlay, onRush, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], rush = { status: 'idle' }, status, error }) {
   // Which panel is showing ('settings' | 'leaderboard'), and whether it is folding away.
   const [panel, setPanel] = useState(null);
   const [panelClosing, setPanelClosing] = useState(false);
   const panelTimer = useRef(null);
   const queuedPanel = useRef(null);
   const [timeUntilReset, setTimeUntilReset] = useState(getTimeUntilAmmanReset);
-  const remainingLevels = [1, 2, 3].filter((level) => !completedLevels.includes(level));
+  const remainingLevels = LEVEL_NUMBERS.filter((level) => !completedLevels.includes(level));
+  const allCleared = remainingLevels.length === 0;
+  // PLAY goes to the first level still to clear; once everything is cleared it starts over at level 1.
   const nextLevel = remainingLevels[0] || 1;
 
+  // With everything cleared, the menu counts down to the next set of puzzles.
   useEffect(() => {
-    if (remainingLevels.length) return undefined;
+    if (!allCleared) return undefined;
     const updateCountdown = () => setTimeUntilReset(getTimeUntilAmmanReset());
     updateCountdown();
     const timer = window.setInterval(updateCountdown, 1000);
     return () => window.clearInterval(timer);
-  }, [remainingLevels.length]);
+  }, [allCleared]);
+
+  // A Swipe Rush left running keeps counting while the player is in the menu, so show how long is left.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (rush.status !== 'running') return undefined;
+    const tick = () => setNow(Date.now());
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [rush.status]);
 
   const layoutRef = useRef(null);
   const navRef = useRef(null);
@@ -825,22 +978,26 @@ export default function MainMenu({ onPlay, leaving = false, settings, onSettings
 
   function handleAction(action) {
     if (action === 'play') onPlay(nextLevel);
+    else if (action === 'rush') onRush();
     else togglePanel(action);
   }
 
-  const locked = remainingLevels.length === 0;
   // Boards are generated on the device, so this only lasts a moment after the page loads.
   const connecting = status !== 'ready';
 
   function playLabel() {
-    if (locked) return 'LOCKED';
     if (connecting) return 'LOADING';
+    if (allCleared) return 'PLAY AGAIN';
     return completedLevels.length ? 'CONTINUE' : 'PLAY';
+  }
+
+  function refuseLevel() {
+    if (settings.sfx) sounds.refused(settings.sfxVolume);
+    vibrate([14, 50, 14]);
   }
 
   return (
     <section className={`duel-menu ${openPanel ? 'has-panel-open' : ''} ${leaving ? 'is-leaving' : ''}`} aria-label="Swipe Cover main menu">
-      <MenuAtmosphere remainingLevels={remainingLevels} />
       <div className="menu-grain" aria-hidden="true" />
 
       <div className="menu-layout" ref={layoutRef}>
@@ -850,30 +1007,32 @@ export default function MainMenu({ onPlay, leaving = false, settings, onSettings
           <nav ref={navRef}>
             {MENU_ITEMS.map(({ id, label, icon: Icon }) => {
               const isPlay = id === 'play';
+              const isRush = id === 'rush';
               let icon = <Icon size={17} strokeWidth={1.35} />;
-              if (isPlay && locked) icon = <LockKeyhole size={17} strokeWidth={1.35} />;
-              else if (isPlay && connecting) icon = <LoaderCircle className="menu-spin" size={17} strokeWidth={1.35} />;
+              if (isPlay && connecting) icon = <LoaderCircle className="menu-spin" size={17} strokeWidth={1.35} />;
               return (
                 <button
                   type="button"
                   key={id}
                   ref={id === 'settings' ? settingsButtonRef : id === 'leaderboard' ? leaderboardButtonRef : undefined}
                   onClick={() => handleAction(id)}
-                  className={`menu-nav-item ${isPlay && !locked && !openPanel ? 'is-primary' : ''} ${isPlay && (locked || connecting) ? 'is-locked' : ''} ${openPanel === id ? 'is-selected' : ''}`}
-                  disabled={isPlay && (locked || connecting)}
-                  aria-label={isPlay && locked ? 'Play is locked until the daily puzzles reset' : undefined}
-                  aria-expanded={isPlay ? undefined : openPanel === id}
+                  className={`menu-nav-item ${isPlay && !connecting && !openPanel ? 'is-primary' : ''} ${isPlay && connecting ? 'is-locked' : ''} ${isRush ? 'is-rush' : ''} ${openPanel === id ? 'is-selected' : ''}`}
+                  disabled={isPlay && connecting}
+                  aria-expanded={isPlay || isRush ? undefined : openPanel === id}
                 >
                   <span className="menu-nav-icon">{icon}</span>
-                  <span className="menu-nav-label">{isPlay ? playLabel() : label}</span>
-                  {!(isPlay && (locked || connecting)) && <ArrowUpRight className="menu-nav-arrow" size={16} strokeWidth={1.5} />}
+                  <span className="menu-nav-text">
+                    <span className="menu-nav-label">{isPlay ? playLabel() : label}</span>
+                    {isRush && <small className="menu-nav-sub">{rushNote(rush, now)}</small>}
+                  </span>
+                  {!(isPlay && connecting) && <ArrowUpRight className="menu-nav-arrow" size={16} strokeWidth={1.5} />}
                 </button>
               );
             })}
           </nav>
-          {remainingLevels.length === 0 && (
+          {allCleared && (
             <p className="menu-countdown">
-              <span>COME BACK IN</span>
+              <span>NEW PUZZLES IN</span>
               <strong>{formatCountdown(timeUntilReset)}</strong>
             </p>
           )}
@@ -937,11 +1096,22 @@ export default function MainMenu({ onPlay, leaving = false, settings, onSettings
             >
               {panel === 'settings'
                 ? <SettingsContent settings={settings} onSettingsChange={onSettingsChange} />
-                : <LeaderboardContent levelScores={levelScores} player={player} />}
+                : <LeaderboardContent levelScores={levelScores} player={player} rush={rush} />}
             </MenuPanel>
           </>
         )}
       </div>
+
+      {/* Behind everything (z-index) but after the menu in the DOM, so Tab reaches the menu first. */}
+      <MenuAtmosphere>
+        <LevelOrbs
+          cleared={completedLevels}
+          firstRuns={levelScores}
+          disabled={connecting || leaving}
+          onPlay={onPlay}
+          onRefuse={refuseLevel}
+        />
+      </MenuAtmosphere>
 
       <div className="menu-footer">
         <span><i /> {completedLevels.length} / 3 GAMES CLEARED TODAY</span>

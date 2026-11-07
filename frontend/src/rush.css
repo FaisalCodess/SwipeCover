@@ -1,0 +1,644 @@
+/* Swipe Rush: the cave below the menu, and everything that makes it feel urgent.
+   Palette: the menu's teal and red, but with lava, so ember amber leads. */
+
+/* ---------- The camera falls from the menu into the cave (and climbs back) ----------
+   Same trick as the sky: the menu and the scene sit one above the other in a 200svh box and
+   the box slides. Here the cave is the lower half, so the box slides up as the camera falls. */
+
+.camera-dive,
+.camera-rise {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 200svh;
+  will-change: transform;
+}
+
+.camera-dive > .duel-menu,
+.camera-rise > .duel-menu {
+  height: 100svh;
+  min-height: 0;
+}
+
+.camera-dive {
+  animation: camera-dive 1.7s cubic-bezier(.65, 0, .2, 1) both;
+}
+
+.camera-rise {
+  animation: camera-rise 1.7s .35s cubic-bezier(.65, 0, .2, 1) both;
+}
+
+@keyframes camera-dive {
+  from { transform: translateY(0); }
+  to { transform: translateY(-100svh); }
+}
+
+@keyframes camera-rise {
+  from { transform: translateY(-100svh); }
+  to { transform: translateY(0); }
+}
+
+.shared-brand.is-rise {
+  transition-delay: .35s;
+}
+
+/* ---------- The cave ---------- */
+
+.cave-below {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: #07090e;
+}
+
+.cave-below > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The lit back wall of the cave: cool violet haze high up, warming to the glow of the lava below.
+   It is brighter than the stalactites hanging in front of it, so they read as silhouettes. */
+.cave-base {
+  background:
+    radial-gradient(ellipse 70% 34% at 50% 30%, rgba(120, 96, 190, .2), transparent 74%),
+    linear-gradient(180deg, #0a0810 0%, #140d1c 22%, #1e0f18 50%, #2c1010 78%, #3f1608 100%);
+}
+
+.cave-rock {
+  z-index: 1;
+}
+
+.cave-strata {
+  fill: none;
+  stroke: rgba(150, 168, 200, .12);
+  stroke-width: 2;
+}
+
+/* A faint rim of light along the inner edge of each wall: cool on the crystal side, warm on the lava side. */
+.cave-wall-rim {
+  fill: none;
+  stroke-width: 3;
+  opacity: .5;
+}
+
+.cave-wall-rim.is-teal {
+  stroke: #4ef3d0;
+  filter: drop-shadow(0 0 8px rgba(78, 243, 208, .6));
+}
+
+.cave-wall-rim.is-ember {
+  stroke: #ff7a4a;
+  filter: drop-shadow(0 0 8px rgba(255, 110, 60, .6));
+}
+
+.cave-vein {
+  fill: none;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  opacity: .8;
+  filter: drop-shadow(0 0 5px currentColor);
+}
+
+.cave-vein.is-teal {
+  color: #4ef3d0;
+  stroke: #4ef3d0;
+  stroke-opacity: .55;
+}
+
+.cave-vein.is-amber {
+  color: #ff9a52;
+  stroke: #ff9a52;
+  stroke-opacity: .6;
+}
+
+.cave-edge {
+  stroke-width: 2.6;
+  stroke-linejoin: round;
+  opacity: .9;
+  filter: drop-shadow(0 0 6px rgba(255, 150, 80, .55));
+}
+
+/* Two soft shafts of light falling through gaps in the ceiling. */
+.cave-shafts {
+  z-index: 2;
+  background:
+    linear-gradient(103deg, transparent 22%, rgba(150, 214, 255, .1) 27%, rgba(150, 214, 255, .02) 34%, transparent 40%),
+    linear-gradient(97deg, transparent 62%, rgba(255, 176, 120, .09) 67%, rgba(255, 176, 120, .02) 74%, transparent 80%);
+  -webkit-mask-image: linear-gradient(180deg, #000 10%, transparent 78%);
+  mask-image: linear-gradient(180deg, #000 10%, transparent 78%);
+  mix-blend-mode: screen;
+  animation: shaft-sway 14s ease-in-out infinite alternate;
+}
+
+@keyframes shaft-sway {
+  from { opacity: .7; transform: translateX(-1.2%); }
+  to { opacity: 1; transform: translateX(1.4%); }
+}
+
+/* Warm light from the lava below, cool light from the crystals either side. */
+.cave-glow {
+  z-index: 2;
+  background:
+    radial-gradient(ellipse 66% 46% at 50% 114%, rgba(255, 110, 44, .55), transparent 70%),
+    radial-gradient(ellipse 32% 46% at 3% 66%, rgba(78, 243, 208, .3), transparent 72%),
+    radial-gradient(ellipse 28% 42% at 99% 72%, rgba(255, 84, 72, .34), transparent 72%),
+    radial-gradient(ellipse 54% 28% at 50% 24%, rgba(255, 154, 82, .08), transparent 72%);
+  animation: cave-flicker 5.4s ease-in-out infinite alternate;
+}
+
+@keyframes cave-flicker {
+  0% { opacity: .82; }
+  35% { opacity: 1; }
+  60% { opacity: .9; }
+  100% { opacity: 1; }
+}
+
+.cave-crystals {
+  z-index: 3;
+  inset: auto;
+  bottom: 3%;
+  /* Never more than a little over a third of the width, so on a phone they frame the buttons instead of crowding them. */
+  width: min(var(--size), 38vw);
+  height: auto;
+  animation: crystal-pulse 4.2s ease-in-out infinite alternate;
+}
+
+.cave-crystals.is-left {
+  left: 1.5%;
+  filter: drop-shadow(0 0 20px rgba(78, 243, 208, .55));
+}
+
+.cave-crystals.is-right {
+  right: 1.5%;
+  filter: drop-shadow(0 0 20px rgba(255, 96, 70, .55));
+  animation-delay: -2s;
+}
+
+/* Smaller clusters growing out of the walls higher up, leaning in toward the middle. */
+.cave-crystals.is-left-high {
+  left: -1%;
+  bottom: 40%;
+  transform: rotate(52deg);
+  filter: drop-shadow(0 0 16px rgba(255, 110, 70, .5));
+  animation-delay: -1s;
+}
+
+.cave-crystals.is-right-high {
+  right: -1%;
+  bottom: 47%;
+  transform: rotate(-54deg);
+  filter: drop-shadow(0 0 16px rgba(78, 243, 208, .5));
+  animation-delay: -3s;
+}
+
+@keyframes crystal-pulse {
+  from { opacity: .82; }
+  to { opacity: 1; }
+}
+
+/* A river of lava along the floor, with a bright current moving through it. */
+.cave-lava {
+  z-index: 4;
+  inset: auto 0 0;
+  height: 24%;
+  background: linear-gradient(0deg, rgba(255, 98, 36, .96) 0, rgba(255, 150, 62, .72) 9%, rgba(255, 92, 30, .3) 34%, transparent 100%);
+}
+
+.cave-lava::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: repeating-linear-gradient(90deg, transparent 0 60px, rgba(255, 226, 150, .3) 90px, transparent 130px);
+  -webkit-mask-image: linear-gradient(0deg, #000, transparent 55%);
+  mask-image: linear-gradient(0deg, #000, transparent 55%);
+  animation: lava-flow 7s linear infinite;
+}
+
+@keyframes lava-flow {
+  from { background-position: 0 0; }
+  to { background-position: 260px 0; }
+}
+
+.cave-front {
+  z-index: 5;
+}
+
+.cave-front path {
+  fill: #05060a;
+  stroke: rgba(255, 150, 82, .5);
+  stroke-width: 2;
+}
+
+/* Lava showing through cracks in the ground. */
+.cave-front .cave-crack {
+  fill: none;
+  stroke: #ffb25e;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 5px #ff6a2a);
+  animation: crack-glow 3.6s ease-in-out infinite alternate;
+}
+
+@keyframes crack-glow {
+  from { opacity: .55; }
+  to { opacity: 1; }
+}
+
+.cave-mist {
+  z-index: 6;
+  inset: -4%;
+  width: auto;
+  height: auto;
+  background:
+    radial-gradient(ellipse 60% 9% at 30% 84%, rgba(255, 130, 70, .11), transparent 72%),
+    radial-gradient(ellipse 50% 8% at 74% 90%, rgba(255, 110, 60, .09), transparent 72%),
+    radial-gradient(ellipse 44% 10% at 50% 58%, rgba(150, 120, 140, .045), transparent 72%);
+  filter: blur(26px);
+  animation: mist-drift 22s ease-in-out infinite alternate;
+}
+
+/* The sparks are the same canvas the menu uses, just in ember colours. */
+.cave-below .menu-embers {
+  z-index: 7;
+  opacity: .9;
+}
+
+.cave-vignette {
+  z-index: 8;
+  background: radial-gradient(ellipse 80% 76% at 50% 46%, transparent 46%, rgba(2, 3, 6, .62) 100%);
+}
+
+/* Time running out: the lava flares, then the whole cave pulses red. */
+.cave-below[data-heat="1"] .cave-lava {
+  filter: brightness(1.3) saturate(1.1);
+}
+
+.cave-below[data-heat="2"] .cave-lava {
+  filter: brightness(1.55) saturate(1.2);
+}
+
+.cave-below[data-heat="2"] .cave-vignette::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: radial-gradient(ellipse 80% 76% at 50% 48%, transparent 44%, rgba(255, 40, 30, .34) 100%);
+  animation: critical-pulse 1s ease-in-out infinite;
+}
+
+@keyframes critical-pulse {
+  0%, 100% { opacity: .35; }
+  50% { opacity: 1; }
+}
+
+/* ---------- The Swipe Rush screen ---------- */
+
+/* The screen chrome (chips, labels, the board's frame) is ember instead of teal. */
+.rush-view {
+  --teal: 255, 196, 140;
+  --neon: 255, 150, 80;
+  --glass: rgba(26, 12, 14, .66);
+}
+
+/* The HUD is taller than a level's (a big score and clock) and has the bar under it, so the
+   board gives up more height to stay clear of the buttons below it. */
+.rush-view .game-hud,
+.rush-view .game-statusbar,
+.rush-view .rush-bar,
+.rush-view .game-board-frame {
+  width: min(94vw, calc((100svh - 332px) * var(--board-ratio, 1) + 40px), 1040px);
+}
+
+.rush-view .game-chip {
+  background: rgba(30, 12, 12, .55);
+}
+
+.rush-view .game-chip:hover:not(:disabled),
+.rush-view .game-chip:focus-visible {
+  background: rgba(110, 44, 24, .5);
+}
+
+.rush-view .game-level-label {
+  color: #ffb36b;
+  text-shadow: 0 0 16px rgba(255, 140, 60, .45);
+}
+
+.rush-view .game-board-frame > .menu-panel-frame {
+  --edge: rgba(255, 206, 160, .82);
+}
+
+.rush-hud {
+  align-items: flex-end;
+}
+
+.rush-hud-left {
+  display: grid;
+  gap: 8px;
+}
+
+.rush-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 9px;
+  color: #fff3e6;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.rush-score b {
+  display: inline-block;
+  min-width: .9ch;
+  font-size: clamp(32px, 4.2vw, 50px);
+  font-weight: 600;
+  line-height: 1;
+  text-shadow: 0 0 22px rgba(255, 150, 70, .5);
+  animation: rush-score-pop .5s cubic-bezier(.2, .9, .3, 1.35) both;
+}
+
+.rush-score small {
+  color: rgba(255, 214, 170, .78);
+  font-size: 10px;
+  letter-spacing: .26em;
+}
+
+@keyframes rush-score-pop {
+  0% { color: #fff; text-shadow: 0 0 38px rgba(255, 210, 130, 1); transform: scale(1.8); }
+  100% { transform: none; }
+}
+
+.rush-clock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 190, 130, .9);
+}
+
+.rush-countdown {
+  min-width: 4.2ch;
+  color: #fff3e6;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(32px, 4.6vw, 56px);
+  font-weight: 600;
+  letter-spacing: .03em;
+  line-height: 1;
+  text-align: right;
+  text-shadow: 0 2px 22px rgba(255, 120, 50, .5);
+}
+
+.rush-view[data-heat="1"] .rush-countdown {
+  color: #ffb36b;
+}
+
+.rush-view[data-heat="2"] .rush-countdown {
+  color: #ff5a4a;
+  text-shadow: 0 0 26px rgba(255, 60, 40, .75);
+  animation: rush-throb 1s ease-in-out infinite;
+}
+
+@keyframes rush-throb {
+  0%, 100% { transform: scale(1); }
+  8% { transform: scale(1.1); }
+  30% { transform: scale(1); }
+}
+
+.rush-bar {
+  height: 4px;
+  overflow: hidden;
+  background: rgba(255, 220, 190, .12);
+}
+
+.rush-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ffc46e, #ff6a3d);
+  box-shadow: 0 0 12px rgba(255, 120, 60, .75);
+  transform-origin: left center;
+}
+
+.rush-view[data-heat="2"] .rush-bar i {
+  background: linear-gradient(90deg, #ff7a4a, #ff3a2e);
+}
+
+/* The bar sits between the HUD and the board, so it builds in with them. */
+.rush-bar {
+  opacity: 0;
+  transition: opacity .35s ease;
+}
+
+.rush-view.is-live .rush-bar {
+  opacity: 1;
+  transition-delay: .16s;
+}
+
+/* The board: the ball leaves a trail of molten rock, and the walls are dark stone. */
+.rush-view .board-tile.is-open {
+  border-color: rgba(255, 196, 150, .36);
+  background: rgba(70, 34, 34, .6);
+}
+
+.rush-view .board-tile.is-open.j-t { border-top-color: rgba(255, 196, 150, .13); }
+.rush-view .board-tile.is-open.j-l { border-left-color: rgba(255, 196, 150, .13); }
+
+.rush-view .board-tile.is-covered {
+  border-color: rgba(255, 214, 160, .85);
+  background: #7a2c12;
+}
+
+.rush-view .board-tile.is-covered.j-t { border-top-color: rgba(255, 214, 160, .2); }
+.rush-view .board-tile.is-covered.j-l { border-left-color: rgba(255, 214, 160, .2); }
+
+.rush-view .board-tile.is-covered::before {
+  box-shadow: 0 0 9px rgba(255, 120, 50, .55), 0 0 26px rgba(255, 80, 30, .3);
+}
+
+.rush-view .board-wall-cell {
+  border: 1px solid rgba(255, 160, 100, .3);
+  background: linear-gradient(120deg, rgba(88, 42, 40, .96), rgba(40, 20, 28, .96) 62%, rgba(14, 8, 14, .97));
+  box-shadow: inset 1px 0 0 rgba(255, 214, 170, .3), 0 0 18px rgba(255, 110, 60, .14);
+}
+
+.rush-view .board-wall-face {
+  background: linear-gradient(transparent, rgba(255, 190, 140, .5), transparent);
+}
+
+/* Each new board drops in, and the frame flares when one is cleared. */
+.rush-board-in {
+  animation: rush-board-in .26s cubic-bezier(.2, .8, .3, 1) both;
+}
+
+@keyframes rush-board-in {
+  from { opacity: 0; transform: scale(.93) translateY(10px); filter: brightness(1.7); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+.rush-view .game-board-frame[data-phase="advancing"] > .menu-panel-frame {
+  --edge: #fff0d0;
+}
+
+.rush-view .board-grid {
+  transition: filter .35s ease, opacity .35s ease;
+}
+
+/* Before the clock starts the board is hidden behind a blur, then snaps into focus at GO. */
+.rush-view .game-board-frame[data-phase="ready"] .board-grid {
+  filter: blur(10px) brightness(.7);
+  opacity: .6;
+}
+
+/* Time is up: the board goes cold and grey. */
+.rush-view .game-board-frame[data-phase="timeup"] .board-grid,
+.rush-view .game-board-frame[data-phase="rushDone"] .board-grid {
+  filter: grayscale(1) brightness(.55);
+}
+
+/* ---------- READY / GO! / TIME'S UP ---------- */
+
+.rush-banner {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.rush-banner span {
+  color: #fff3e6;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(54px, 12vw, 150px);
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-shadow: 0 0 42px rgba(255, 140, 60, .85), 0 8px 44px rgba(0, 0, 0, .7);
+  animation: rush-banner-in .4s cubic-bezier(.2, .9, .3, 1.3) both;
+}
+
+.rush-banner.is-go span {
+  color: #ffd27a;
+  animation: rush-banner-go .85s ease-out both;
+}
+
+.rush-banner.is-time span {
+  color: #ff5a4a;
+  text-shadow: 0 0 46px rgba(255, 50, 40, .85), 0 8px 44px rgba(0, 0, 0, .7);
+}
+
+@keyframes rush-banner-in {
+  from { opacity: 0; transform: scale(1.6); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rush-banner-go {
+  0% { opacity: 0; transform: scale(.6); }
+  25% { opacity: 1; transform: scale(1.08); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+
+/* ---------- On the menu: the SWIPE RUSH item, and its tab in the leaderboard ---------- */
+
+.menu-nav-text {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.menu-nav-sub {
+  color: rgba(255, 190, 130, .8);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .2em;
+}
+
+.menu-nav-item.is-rush .menu-nav-icon {
+  color: rgba(255, 178, 110, .9);
+  filter: drop-shadow(0 0 7px rgba(255, 120, 50, .45));
+}
+
+.menu-nav-item.is-rush::before {
+  background: linear-gradient(90deg, rgba(255, 154, 82, .15), rgba(255, 120, 60, .045) 68%, transparent);
+}
+
+.menu-nav-item.is-rush::after {
+  background: #ffab6b;
+  box-shadow: 0 0 12px #ff7a30;
+}
+
+.menu-nav-item.is-rush:focus-visible::before {
+  border-color: rgba(255, 170, 110, .2);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .menu-nav-item.is-rush:not(:disabled):hover::before {
+    border-color: rgba(255, 170, 110, .2);
+  }
+
+  .menu-nav-item.is-rush:not(:disabled):hover .menu-nav-icon {
+    color: #ffc58f;
+    filter: drop-shadow(0 0 9px rgba(255, 130, 60, .7));
+  }
+}
+
+.menu-nav-item.is-rush .menu-nav-arrow {
+  color: #ffb36b;
+}
+
+.menu-board-tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.menu-board-tab.is-rush {
+  font-weight: 600;
+}
+
+.menu-board-tab.is-rush:hover,
+.menu-board-tab.is-rush:focus-visible {
+  border-color: rgba(255, 170, 110, .5);
+}
+
+.menu-board-tab.is-rush.is-active {
+  border-color: rgba(255, 170, 110, .65);
+  background: rgba(255, 150, 80, .12);
+  box-shadow: inset 0 0 14px rgba(255, 150, 80, .08);
+  color: #ffb36b;
+}
+
+/* ---------- Narrow screens ---------- */
+
+@media (max-width: 520px) {
+  .rush-hud {
+    gap: 10px;
+  }
+
+  .rush-view .game-hud,
+  .rush-view .game-statusbar,
+  .rush-view .rush-bar,
+  .rush-view .game-board-frame {
+    width: min(94vw, calc((100svh - 280px) * var(--board-ratio, 1) + 40px), 1040px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cave-glow,
+  .cave-shafts,
+  .cave-crystals,
+  .cave-front .cave-crack,
+  .cave-lava::after,
+  .cave-mist,
+  .cave-below[data-heat="2"] .cave-vignette::after,
+  .rush-view[data-heat="2"] .rush-countdown,
+  .rush-board-in,
+  .rush-score b,
+  .rush-banner span {
+    animation: none;
+  }
+
+  .rush-bar {
+    transition: none;
+  }
+}

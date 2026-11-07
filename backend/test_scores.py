@@ -76,10 +76,9 @@ def test_rejects_impossible_times_names_and_old_days(client, route):
     assert client.post("/api/scores", json=payload(route, day="2020-01-01")).status_code == 400
 
 
-def test_keeps_each_players_fastest_time_and_ranks_everyone(client, route):
+def test_ranks_everyone_by_their_time(client, route):
     me = str(uuid4())
     client.post("/api/scores", json=payload(route, player_id=me, name="Myself", time_ms=40000))
-    client.post("/api/scores", json=payload(route, player_id=me, name="Myself", time_ms=50000))
     for index in range(11):
         client.post("/api/scores", json=payload(route, name=f"Rival {index:02}", time_ms=20000 + index))
 
@@ -89,7 +88,41 @@ def test_keeps_each_players_fastest_time_and_ranks_everyone(client, route):
     assert board["total"] == 12
     assert board["you"] == {"rank": 12, "name": "Myself", "time_ms": 40000, "moves": len(route), "you": True}
 
-    client.post("/api/scores", json=payload(route, player_id=me, name="Myself", time_ms=10000))
+
+def test_only_a_players_first_run_counts(client, route):
+    me = str(uuid4())
+    first = client.post("/api/scores", json=payload(route, player_id=me, name="Myself", time_ms=40000))
+    assert first.status_code == 200 and first.json()["rank"] == 1
+
+    # Replays are practice. A faster one (the solution is now known) must not replace the first run...
+    fastest_possible = len(route) * main.MIN_MS_PER_MOVE
+    faster = client.post("/api/scores", json=payload(route, player_id=me, name="Myself", time_ms=fastest_possible))
+    assert faster.status_code == 200
+    assert faster.json()["time_ms"] == 40000
+    # ...and neither does a slower one, or one that tries a new name.
+    client.post("/api/scores", json=payload(route, player_id=me, name="Someone Else", time_ms=90000))
+
     board = client.get("/api/leaderboard/3", headers={"X-Player-Id": me}).json()
-    assert board["entries"][0]["you"] and board["entries"][0]["time_ms"] == 10000
-    assert board["you"] is None
+    assert board["total"] == 1
+    assert board["entries"] == [{"rank": 1, "name": "Myself", "time_ms": 40000, "moves": len(route), "you": True}]
+
+
+def test_a_repeat_submission_keeps_the_original_standing(client, route):
+    me = str(uuid4())
+    client.post("/api/scores", json=payload(route, player_id=me, name="Myself", time_ms=40000))
+    client.post("/api/scores", json=payload(route, name="Rival", time_ms=20000))
+
+    fastest_possible = len(route) * main.MIN_MS_PER_MOVE
+    again = client.post("/api/scores", json=payload(route, player_id=me, name="Myself", time_ms=fastest_possible)).json()
+    assert (again["rank"], again["time_ms"]) == (2, 40000)
+
+
+def test_each_level_has_its_own_first_run(client):
+    me = str(uuid4())
+    for level, time_ms in ((1, 30000), (3, 45000)):
+        solution = solve(level, current_day_key())
+        response = client.post("/api/scores", json=payload(solution, level=level, player_id=me, time_ms=time_ms))
+        assert response.status_code == 200 and response.json()["rank"] == 1
+
+    assert client.get("/api/leaderboard/1", headers={"X-Player-Id": me}).json()["entries"][0]["time_ms"] == 30000
+    assert client.get("/api/leaderboard/3", headers={"X-Player-Id": me}).json()["entries"][0]["time_ms"] == 45000

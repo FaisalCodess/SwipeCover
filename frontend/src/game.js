@@ -36,3 +36,18 @@ export function slide(board, player, direction) {
   nextBoard[row][col] = 'P';
   return { board: nextBoard, player: { row, col }, path };
 }
+
+// Plays saved moves back from the start, to pick a run up where the player left it. Each state
+// before a move is kept as undo history. Replay stops early at a move that no longer fits the
+// board, or that would solve the level, so a stale save can never hand out a finished board.
+export function replayRoute(board, player, route) {
+  let state = { board, player, route: [] };
+  const history = [];
+  for (const direction of route) {
+    const next = slide(state.board, state.player, direction);
+    if (!next || countDots(next.board) === 0) break;
+    history.push(state);
+    state = { board: next.board, player: next.player, route: [...state.route, direction] };
+  }
+  return { ...state, history };
+}
