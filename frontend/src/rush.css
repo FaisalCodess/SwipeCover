@@ -480,19 +480,19 @@
   --edge: #fff0d0;
 }
 
-.rush-view .board-grid {
+.rush-view .board-layer {
   transition: filter .35s ease, opacity .35s ease;
 }
 
 /* Before the clock starts the board is hidden behind a blur, then snaps into focus at GO. */
-.rush-view .game-board-frame[data-phase="ready"] .board-grid {
+.rush-view .game-board-frame[data-phase="ready"] .board-layer {
   filter: blur(10px) brightness(.7);
   opacity: .6;
 }
 
 /* Time is up: the board goes cold and grey. */
-.rush-view .game-board-frame[data-phase="timeup"] .board-grid,
-.rush-view .game-board-frame[data-phase="rushDone"] .board-grid {
+.rush-view .game-board-frame[data-phase="timeup"] .board-layer,
+.rush-view .game-board-frame[data-phase="rushDone"] .board-layer {
   filter: grayscale(1) brightness(.55);
 }
 

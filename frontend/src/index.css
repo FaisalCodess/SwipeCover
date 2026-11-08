@@ -88,8 +88,20 @@ input:focus-visible,
   -webkit-touch-callout: none;
 }
 
-.board-grid {
+/* Holds the grid, and over it the canvas of sparks and the ball. It is exactly the grid's size,
+   so the ball and the canvas line up with the squares. */
+.board-layer {
   --gap: 4px;
+  position: relative;
+}
+
+@media (min-width: 640px) {
+  .board-layer {
+    --gap: 6px;
+  }
+}
+
+.board-grid {
   position: relative;
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
@@ -98,10 +110,16 @@ input:focus-visible,
   aspect-ratio: var(--cols) / var(--rows);
 }
 
-@media (min-width: 640px) {
-  .board-grid {
-    --gap: 6px;
-  }
+/* Sparks, the ball's comet tail and its light. Reaches 32px past the board on every side
+   (MARGIN in ballEngine.js), so sparks thrown off the edge are not cut short. */
+.board-fx {
+  position: absolute;
+  z-index: 5;
+  top: -32px;
+  left: -32px;
+  width: calc(100% + 64px);
+  height: calc(100% + 64px);
+  pointer-events: none;
 }
 
 .board-cell {
@@ -180,6 +198,8 @@ input:focus-visible,
   40% { transform: scale(1.9); background: rgba(124, 232, 185, 0.95); box-shadow: 0 0 14px rgba(124, 232, 185, 0.7); }
 }
 
+/* One square in size. --x and --y are its column and row, with fractions while it moves:
+   ballEngine.js writes them every frame. */
 .board-player {
   position: absolute;
   top: 0;
@@ -190,19 +210,34 @@ input:focus-visible,
   height: calc((100% - (var(--rows) - 1) * var(--gap)) / var(--rows));
   place-items: center;
   pointer-events: none;
-  transform: translate(calc(var(--col) * (100% + var(--gap))), calc(var(--row) * (100% + var(--gap))));
-  transition: transform var(--slide-ms, 0ms) cubic-bezier(0.5, 1, 0.89, 1);
+  transform: translate3d(calc(var(--x, 0) * (100% + var(--gap))), calc(var(--y, 0) * (100% + var(--gap))), 0);
   will-change: transform;
 }
 
-.board-player-ball {
+/* Squashes and stretches (set from ballEngine.js) around its centre. */
+.board-player-body {
   position: relative;
   width: 64%;
   height: 64%;
+  will-change: transform;
+}
+
+/* The ball itself never quite sits still: its outline slowly wobbles like a drop of jelly. */
+.board-player-ball {
+  position: absolute;
+  inset: 0;
   border: 1px solid rgba(255, 255, 255, 0.35);
-  border-radius: 9999px;
+  border-radius: 50%;
   background: radial-gradient(circle at 32% 25%, #fff1f2 0%, #fca5a5 20%, #ef5353 55%, #8b252a 100%);
   box-shadow: 0 0 18px rgba(239, 83, 83, 0.62);
+  animation: ball-jelly 3.2s ease-in-out infinite;
+}
+
+@keyframes ball-jelly {
+  0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; transform: scale(1, 1); }
+  25% { border-radius: 54% 46% 51% 49% / 47% 53% 48% 52%; transform: scale(1.025, 0.975); }
+  50% { border-radius: 48% 52% 46% 54% / 52% 47% 53% 48%; transform: scale(0.98, 1.02); }
+  75% { border-radius: 52% 48% 53% 47% / 49% 54% 46% 51%; transform: scale(1.015, 0.985); }
 }
 
 .board-player-ball::after {
@@ -215,16 +250,6 @@ input:focus-visible,
   background: rgba(255, 255, 255, 0.6);
   content: '';
   filter: blur(1px);
-}
-
-.board-player-ball.is-bumped {
-  animation: player-bump 0.26s ease-out;
-}
-
-@keyframes player-bump {
-  0%, 100% { transform: translate(0, 0); }
-  30% { transform: translate(calc(var(--bump-x) * 14%), calc(var(--bump-y) * 14%)) scale(0.92, 1.06); }
-  60% { transform: translate(calc(var(--bump-x) * -5%), calc(var(--bump-y) * -5%)); }
 }
 
 .board-pause-cover {
@@ -269,10 +294,10 @@ input:focus-visible,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .board-player { transition-duration: 0ms; }
+  .board-fx { display: none; }
   .board-trail.is-fresh,
   .board-won .board-trail,
-  .board-player-ball.is-bumped,
+  .board-player-ball,
   .pop-in,
   .pop-out,
   .fade-in,

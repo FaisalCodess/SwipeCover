@@ -169,5 +169,15 @@ If the file is missing or cannot play, the game falls back to a built-in synth m
 
 Swipe on the board, use the on-screen pad, or the keyboard:
 WASD / arrow keys to move, Z to undo, R to restart, Esc to pause (levels only).
+A swipe can turn without lifting the finger (right, then down, ...) to chain moves in one stroke.
 Pausing only covers the board; the clock keeps running. Swipe Rush cannot be paused.
 Settings and leaderboard times are stored in the browser.
+
+## The ball
+
+The ball's motion runs outside React, in `frontend/src/ballEngine.js`: a frame loop slides it
+along one timing curve, squashes and stretches it on springs (so it wobbles when it hits a wall)
+and draws sparks, a comet tail and its glow on a canvas over the board. The tiles light up on the
+same curve (`paintDelay` in `frontend/src/motion.js`), so change the curve there and both follow.
+Spring stiffness, stretch amounts and spark counts are plain numbers in `ballEngine.js`. With
+"reduce motion" turned on in the system settings, the ball moves instantly and no sparks are drawn.

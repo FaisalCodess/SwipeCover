@@ -20,6 +20,8 @@ import {
 import MainMenu, { BoardFrame, CutFrame, keyShape, SkyAbove } from './MainMenu.jsx';
 import BackgroundMusic from './BackgroundMusic.jsx';
 import { CaveBelow, RushBanner, RushHud, useRushPressure } from './Rush.jsx';
+import BoardBall from './BoardBall.jsx';
+import { paintDelay, slideDuration } from './motion.js';
 import './main-menu.css';
 import './game-view.css';
 import './rush.css';
@@ -127,11 +129,6 @@ function formatTime(milliseconds) {
   const seconds = Math.floor((total % 60000) / 1000);
   const centiseconds = Math.floor((total % 1000) / 10);
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(centiseconds).padStart(2, '0')}`;
-}
-
-// Slides speed up when moves are queued, so fast players never wait on animations.
-function slideDuration(distance, queued) {
-  return Math.min(240, 70 + distance * 24) / (1 + queued * 0.6);
 }
 
 function prefersReducedMotion() {
@@ -415,20 +412,31 @@ function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey }) {
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
-  // Fire as soon as the swipe is long enough instead of waiting for the finger to lift.
+  // Fire as soon as the swipe is long enough instead of waiting for the finger to lift. The finger
+  // can then carry on and turn (right, then down, ...) to chain moves in one stroke.
   function handlePointerMove(event) {
     const start = gesture.current;
     if (!start || start.id !== event.pointerId) return;
+    if (start.last) {
+      // Carrying on the way the last swipe went only moves the starting point along with the
+      // finger, so a turn is measured from where it begins. (Sliding the same way twice in a row
+      // never does anything: the ball is already against the wall.)
+      const [lastRow, lastCol] = DIRECTION_STEPS[start.last];
+      const ahead = (event.clientX - start.x) * lastCol + (event.clientY - start.y) * lastRow;
+      if (ahead > 0) {
+        start.x += ahead * lastCol;
+        start.y += ahead * lastRow;
+      }
+    }
     const deltaX = event.clientX - start.x;
     const deltaY = event.clientY - start.y;
     if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 22) return;
-    gesture.current = null;
-    onMove(Math.abs(deltaX) > Math.abs(deltaY)
+    const direction = Math.abs(deltaX) > Math.abs(deltaY)
       ? (deltaX > 0 ? 'right' : 'left')
-      : (deltaY > 0 ? 'down' : 'up'));
+      : (deltaY > 0 ? 'down' : 'up');
+    gesture.current = { x: event.clientX, y: event.clientY, id: event.pointerId, last: direction };
+    onMove(direction);
   }
-
-  const [bumpRow, bumpCol] = bump ? DIRECTION_STEPS[bump.direction] : [0, 0];
 
   return (
     <div
@@ -440,57 +448,59 @@ function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey }) {
       onPointerCancel={() => { gesture.current = null; }}
     >
       <BoardFrame />
-      <div
-        key={mapKey}
-        className={`board-grid ${celebrating ? 'board-won' : ''} ${mapKey === undefined ? '' : 'rush-board-in'}`}
-        style={{ '--rows': rows, '--cols': cols }}
-        role="img"
-        aria-label={`Game board, ${run.remaining} squares left to cover`}
-      >
-        {board.flatMap((row, rowIndex) => row.map((cell, colIndex) => {
-          const cellKey = `${rowIndex}-${colIndex}`;
-          if (cell === '|') {
+      {/* The ball and its sparks sit beside the grid, not in it: a new Swipe Rush board swaps the
+          grid out, and the sparks from clearing the last one carry on over the next. */}
+      <div className="board-layer" style={{ '--rows': rows, '--cols': cols }}>
+        <div
+          key={mapKey}
+          className={`board-grid ${celebrating ? 'board-won' : ''} ${mapKey === undefined ? '' : 'rush-board-in'}`}
+          role="img"
+          aria-label={`Game board, ${run.remaining} squares left to cover`}
+        >
+          {board.flatMap((row, rowIndex) => row.map((cell, colIndex) => {
+            const cellKey = `${rowIndex}-${colIndex}`;
+            if (cell === '|') {
+              return (
+                <div key={cellKey} className="board-wall-cell relative overflow-hidden rounded-[5px] sm:rounded-[9px]">
+                  <span className="board-wall-face" aria-hidden="true" />
+                </div>
+              );
+            }
+            const freshDelay = anim.fresh?.[cellKey];
+            // Squares of the same kind (painted or not yet painted) join up into one shape.
+            // The square under the ball counts as painted.
+            const kind = cell === '.' ? 'open' : 'covered';
+            const same = (r, c) => {
+              const other = board[r]?.[c];
+              return other !== undefined && other !== '|' && (other === '.' ? 'open' : 'covered') === kind;
+            };
+            const up = same(rowIndex - 1, colIndex);
+            const right = same(rowIndex, colIndex + 1);
+            const down = same(rowIndex + 1, colIndex);
+            const left = same(rowIndex, colIndex - 1);
+            const corner = right && down && same(rowIndex + 1, colIndex + 1);
+            const joins = `${up ? ' j-t' : ''}${right ? ' j-r' : ''}${down ? ' j-b' : ''}${left ? ' j-l' : ''}${corner ? ' j-d' : ''}`;
             return (
-              <div key={cellKey} className="board-wall-cell relative overflow-hidden rounded-[5px] sm:rounded-[9px]">
-                <span className="board-wall-face" aria-hidden="true" />
+              <div key={cellKey} className="board-cell">
+                <span
+                  key={kind === 'open' ? 'open' : (freshDelay === undefined ? 'trail' : `fresh-${anim.id}`)}
+                  className={`board-tile is-${kind}${kind === 'covered' && freshDelay !== undefined ? ' is-fresh' : ''}${joins}`}
+                  style={{ animationDelay: celebrating ? undefined : `${freshDelay ?? 0}ms`, '--wave': rowIndex + colIndex }}
+                />
               </div>
             );
-          }
-          const freshDelay = anim.fresh?.[cellKey];
-          // Squares of the same kind (painted or not yet painted) join up into one shape.
-          // The square under the ball counts as painted.
-          const kind = cell === '.' ? 'open' : 'covered';
-          const same = (r, c) => {
-            const other = board[r]?.[c];
-            return other !== undefined && other !== '|' && (other === '.' ? 'open' : 'covered') === kind;
-          };
-          const up = same(rowIndex - 1, colIndex);
-          const right = same(rowIndex, colIndex + 1);
-          const down = same(rowIndex + 1, colIndex);
-          const left = same(rowIndex, colIndex - 1);
-          const corner = right && down && same(rowIndex + 1, colIndex + 1);
-          const joins = `${up ? ' j-t' : ''}${right ? ' j-r' : ''}${down ? ' j-b' : ''}${left ? ' j-l' : ''}${corner ? ' j-d' : ''}`;
-          return (
-            <div key={cellKey} className="board-cell">
-              <span
-                key={kind === 'open' ? 'open' : (freshDelay === undefined ? 'trail' : `fresh-${anim.id}`)}
-                className={`board-tile is-${kind}${kind === 'covered' && freshDelay !== undefined ? ' is-fresh' : ''}${joins}`}
-                style={{ animationDelay: celebrating ? undefined : `${freshDelay ?? 0}ms`, '--wave': rowIndex + colIndex }}
-              />
-            </div>
-          );
-        }))}
-        <div
-          className="board-player"
-          style={{ '--row': player.row, '--col': player.col, '--slide-ms': `${anim.slideMs}ms` }}
-          aria-hidden="true"
-        >
-          <span
-            key={bump?.id ?? 'ball'}
-            className={`board-player-ball ${bump ? 'is-bumped' : ''}`}
-            style={{ '--bump-x': bumpCol, '--bump-y': bumpRow }}
-          />
+          }))}
         </div>
+        <BoardBall
+          rows={rows}
+          cols={cols}
+          player={player}
+          anim={anim}
+          bump={bump}
+          phase={phase}
+          board={board}
+          mode={mapKey === undefined ? 'level' : 'rush'}
+        />
       </div>
 
       {phase === 'paused' && (
@@ -702,7 +712,9 @@ export default function App() {
   const [screen, setScreen] = useState('home');
   const [phase, setPhase] = useState('playing');
   const [run, setRun] = useState(null);
-  const [anim, setAnim] = useState({ id: 0, slideMs: 0, fresh: null });
+  // What the ball does next: a `move` slides it, `undo` eases it back, `restart` and `load` (a new
+  // board) put it straight on its square. BoardBall plays each one once.
+  const [anim, setAnim] = useState({ id: 0, kind: 'load', slideMs: 0, fresh: null });
   const [bump, setBump] = useState(null);
   const [result, setResult] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -929,7 +941,7 @@ export default function App() {
       moves: resumed.route.length,
       remaining: countDots(resumed.board),
     });
-    setAnim((previous) => ({ id: previous.id + 1, slideMs: 0, fresh: null }));
+    setAnim((previous) => ({ id: previous.id + 1, kind: 'load', slideMs: 0, fresh: null }));
     setBump(null);
     setFeedback('');
     setResult(null);
@@ -1068,7 +1080,7 @@ export default function App() {
   const loadRushBoard = useCallback((nextRun) => {
     clearPending();
     commitRun(nextRun);
-    setAnim((previous) => ({ id: previous.id + 1, slideMs: 0, fresh: null }));
+    setAnim((previous) => ({ id: previous.id + 1, kind: 'load', slideMs: 0, fresh: null }));
     setBump(null);
     setFeedback('');
   }, [clearPending, commitRun]);
@@ -1269,8 +1281,8 @@ export default function App() {
       const fresh = {};
       next.path.forEach(([row, col], index) => {
         if (current.board[row][col] === '.') {
-          // Matches the ease-out curve of the ball so each dot flips as the ball reaches it.
-          fresh[`${row}-${col}`] = Math.round(slideMs * (1 - Math.sqrt(1 - (index + 1) / distance)));
+          // On the ball's own timing curve, so each square lights up as the ball rolls onto it.
+          fresh[`${row}-${col}`] = paintDelay(index, distance, slideMs);
         }
       });
       const updated = {
@@ -1283,7 +1295,7 @@ export default function App() {
         remaining: countDots(next.board),
       };
       commitRun(updated);
-      setAnim((previous) => ({ id: previous.id + 1, slideMs, fresh }));
+      setAnim((previous) => ({ id: previous.id + 1, kind: 'move', direction, slideMs, fresh }));
       setFeedback('');
       sfx('move', distance);
 
@@ -1315,10 +1327,10 @@ export default function App() {
     processQueue();
   }, [processQueue]);
 
-  const jumpTo = useCallback((board, player, route, history, slideMs) => {
+  const jumpTo = useCallback((board, player, route, history, kind, slideMs) => {
     clearPending();
     commitRun({ ...runRef.current, board, player, route, moves: route.length, history, remaining: countDots(board) });
-    setAnim((previous) => ({ id: previous.id + 1, slideMs: prefersReducedMotion() ? 0 : slideMs, fresh: null }));
+    setAnim((previous) => ({ id: previous.id + 1, kind, slideMs: prefersReducedMotion() ? 0 : slideMs, fresh: null }));
     setBump(null);
     setFeedback('');
   }, [clearPending, commitRun]);
@@ -1327,7 +1339,7 @@ export default function App() {
     const current = runRef.current;
     if (phaseRef.current !== 'playing' || !current?.history.length) return;
     const previous = current.history[current.history.length - 1];
-    jumpTo(previous.board, previous.player, previous.route, current.history.slice(0, -1), 140);
+    jumpTo(previous.board, previous.player, previous.route, current.history.slice(0, -1), 'undo', 170);
     sfx('undo');
   }, [jumpTo, sfx]);
 
@@ -1336,7 +1348,7 @@ export default function App() {
     if (phaseRef.current !== 'playing' || !current || current.moves === 0) return;
     // Restarting is undoable, and the clock keeps running.
     const history = [...current.history, { board: current.board, player: current.player, route: current.route }];
-    jumpTo(current.initialBoard, current.initialPlayer, [], history, 0);
+    jumpTo(current.initialBoard, current.initialPlayer, [], history, 'restart', 0);
     sfx('undo');
   }, [jumpTo, sfx]);
 

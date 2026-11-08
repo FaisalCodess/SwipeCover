@@ -371,15 +371,19 @@
   --edge: rgba(200, 240, 234, .82);
 }
 
-.game-view .board-grid {
+.game-view .board-layer {
   --gap: 5px;
   z-index: 1;
 }
 
 @media (min-width: 640px) {
-  .game-view .board-grid {
+  .game-view .board-layer {
     --gap: 7px;
   }
+}
+
+.game-view .board-grid {
+  z-index: 1;
 }
 
 .game-view .board-cell {
@@ -502,8 +506,17 @@
     inset 3px 3px 7px rgba(255, 230, 218, .5);
 }
 
+/* Light bouncing back up through the glass from below, opposite the highlight. */
 .game-view .board-player-ball::after {
-  display: none;
+  top: auto;
+  right: 13%;
+  bottom: 11%;
+  left: auto;
+  width: 38%;
+  height: 20%;
+  background: rgba(255, 176, 162, .32);
+  filter: blur(2px);
+  transform: rotate(-38deg);
 }
 
 @keyframes tile-paint {
