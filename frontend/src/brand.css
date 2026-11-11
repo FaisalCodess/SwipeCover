@@ -1,0 +1,203 @@
+/* The logo (see Brand.jsx). One 5.2s loop drives the whole mark: the ball's run, the squares
+   lighting behind it, and the glint along the wordmark's streak. */
+
+.shared-brand {
+  --loop: 5.2s;
+  --mark: 38px;
+  --word: clamp(18px, 2vw, 27px);
+  --brand-delay: 0s;
+  /* Same curve as the glide (see game-view.css); size changes ride along with the move. */
+  transition: top 1.7s cubic-bezier(.65, 0, .2, 1), left 1.7s cubic-bezier(.65, 0, .2, 1);
+}
+
+/* Big on the menu, compact in the game. The sizes below are transitioned, so the logo
+   shrinks and grows as it glides instead of jumping. */
+.shared-brand.to-menu {
+  --mark: clamp(58px, 9vh, 88px);
+  --word: clamp(26px, 3.3vw, 46px);
+}
+
+.shared-brand.is-down,
+.shared-brand.is-rise {
+  --brand-delay: .35s;
+}
+
+.shared-brand.to-game .brand-tag {
+  opacity: 0;
+}
+
+@media (max-width: 760px) {
+  .shared-brand.to-menu {
+    --mark: 48px;
+    --word: 22px;
+  }
+
+  /* No room for it beside the level orbs on a phone. */
+  .brand-tag { display: none; }
+}
+
+@media (max-width: 390px) {
+  .shared-brand.to-menu {
+    --mark: 42px;
+    --word: 19px;
+  }
+}
+
+.brand-mark {
+  display: block;
+  flex: none;
+  width: var(--mark);
+  height: var(--mark);
+  overflow: visible;
+  filter: drop-shadow(0 0 calc(var(--mark) * .2) rgba(78, 243, 208, .3));
+  transition:
+    width 1.7s cubic-bezier(.65, 0, .2, 1) var(--brand-delay),
+    height 1.7s cubic-bezier(.65, 0, .2, 1) var(--brand-delay),
+    filter .3s ease,
+    transform .3s ease;
+}
+
+.shared-brand:not(:disabled):hover .brand-mark {
+  filter: drop-shadow(0 0 10px rgba(78, 243, 208, .6));
+  transform: scale(1.06);
+}
+
+.brand-plate {
+  fill: rgba(8, 24, 34, .72);
+  stroke: rgba(200, 240, 234, .85);
+  stroke-width: 1;
+}
+
+.brand-plate-inner {
+  fill: none;
+  stroke: rgba(78, 243, 208, .28);
+  stroke-width: .6;
+}
+
+.brand-tile.is-open {
+  fill: rgba(78, 243, 208, .1);
+  stroke: rgba(145, 238, 219, .3);
+  stroke-width: .5;
+}
+
+.brand-wall {
+  fill: #1b252e;
+  stroke: rgba(174, 198, 204, .5);
+  stroke-width: .6;
+}
+
+/* Squares the ball covers: dark until it rolls over them, then lit until the loop restarts.
+   The negative delay lines each one up with the ball (--t is when it gets there). */
+.brand-tile.is-lit {
+  fill: rgba(78, 243, 208, .9);
+  stroke: rgba(224, 255, 249, .85);
+  stroke-width: .5;
+  animation: brand-cover var(--loop) linear infinite;
+  animation-delay: calc(var(--t) - var(--loop));
+}
+
+@keyframes brand-cover {
+  0% { fill: rgba(78, 243, 208, .1); stroke: rgba(145, 238, 219, .3); }
+  4% { fill: #e6fffa; stroke: #fff; }
+  11%, 85% { fill: rgba(78, 243, 208, .9); stroke: rgba(224, 255, 249, .85); }
+  93%, 100% { fill: rgba(78, 243, 208, .1); stroke: rgba(145, 238, 219, .3); }
+}
+
+.brand-ball {
+  filter: drop-shadow(0 0 2.5px rgba(255, 82, 83, .95));
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: brand-run var(--loop) infinite;
+}
+
+/* Waits, slides right (hits the wall), slides down, rests, then pops away and back at the start. */
+@keyframes brand-run {
+  0%, 8% { transform: translate(0, 0) scale(1); animation-timing-function: cubic-bezier(.25, .46, .35, 1); }
+  26% { transform: translate(20px, 0) scale(1.12, .88); animation-timing-function: ease-out; }
+  29%, 36% { transform: translate(20px, 0) scale(1); animation-timing-function: cubic-bezier(.25, .46, .35, 1); }
+  54% { transform: translate(20px, 20px) scale(.88, 1.12); animation-timing-function: ease-out; }
+  57%, 86% { transform: translate(20px, 20px) scale(1); }
+  90% { transform: translate(20px, 20px) scale(0); }
+  90.1% { transform: translate(0, 0) scale(0); }
+  96%, 100% { transform: translate(0, 0) scale(1); }
+}
+
+/* ---------- Wordmark ---------- */
+
+.shared-brand .brand-word {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: .55em;
+  padding-bottom: calc(var(--word) * .28);
+  font-size: var(--word);
+  transition: font-size 1.7s cubic-bezier(.65, 0, .2, 1) var(--brand-delay);
+}
+
+/* A line under the streak that only the menu shows: it fills the space under the logo. */
+.brand-tag {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  color: rgba(206, 233, 228, .62);
+  font-size: clamp(9px, .85vw, 12px);
+  font-weight: 600;
+  letter-spacing: .34em;
+  white-space: nowrap;
+  transition: opacity .5s ease;
+}
+
+.brand-word b {
+  color: #f0f7f3;
+  font-weight: 500;
+}
+
+.brand-word i {
+  color: #4ef3d0;
+  font-style: normal;
+  font-weight: 700;
+  text-shadow: 0 0 16px rgba(78, 243, 208, .5), 0 2px 18px rgba(9, 20, 29, .55);
+}
+
+/* The swipe line under the name, with a glint that runs along it as the ball moves. */
+.brand-streak {
+  position: absolute;
+  right: .2em;
+  bottom: 0;
+  left: 0;
+  height: max(2px, calc(var(--word) * .07));
+  overflow: hidden;
+  background: linear-gradient(90deg, rgba(78, 243, 208, .7), rgba(78, 243, 208, .12) 70%, transparent);
+}
+
+.brand-streak::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 36%;
+  background: linear-gradient(90deg, transparent, #fff, transparent);
+  content: '';
+  transform: translateX(-120%);
+  animation: brand-glint var(--loop) linear infinite;
+}
+
+@keyframes brand-glint {
+  0%, 8% { transform: translateX(-120%); }
+  28% { transform: translateX(300%); }
+  100% { transform: translateX(300%); }
+}
+
+@media (max-width: 520px) {
+  .shared-brand.to-game { --mark: 34px; --word: 15px; }
+}
+
+@media (max-width: 390px) {
+  .shared-brand.to-game { --mark: 30px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-tile.is-lit { animation: none; }
+  .brand-ball { animation: none; transform: translate(20px, 20px); }
+  .brand-streak::after { display: none; }
+}

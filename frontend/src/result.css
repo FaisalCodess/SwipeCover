@@ -1,0 +1,350 @@
+/* The end-of-level and end-of-Swipe-Rush panel. Same cut-corner double-lined frame, Space Grotesk
+   lettering and teal glow as the menu and the board; Swipe Rush swaps the teal for ember. */
+
+.result-overlay {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 16px;
+  background: radial-gradient(ellipse at 50% 45%, rgba(4, 12, 18, .5), rgba(2, 6, 10, .82));
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.result-panel {
+  --tone: 78 243 208;
+  --tone-soft: 145 238 219;
+  --edge: rgba(200, 240, 234, .82);
+  position: relative;
+  width: min(100%, 460px);
+  margin: auto;
+  color: rgba(222, 234, 232, .86);
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.result-panel.is-rush {
+  --tone: 255 154 82;
+  --tone-soft: 255 190 130;
+  --edge: rgba(255, 205, 160, .82);
+}
+
+.result-panel .menu-panel-frame .cut-frame-fill {
+  background:
+    linear-gradient(112deg, rgb(var(--tone) / .07), transparent 42%),
+    rgba(9, 22, 30, .8);
+}
+
+.result-panel.is-rush .menu-panel-frame .cut-frame-fill {
+  background:
+    linear-gradient(112deg, rgb(var(--tone) / .09), transparent 42%),
+    rgba(26, 14, 14, .82);
+}
+
+.result-panel .menu-panel-frame .cut-frame-line {
+  filter: drop-shadow(0 0 5px rgb(var(--tone) / .4));
+}
+
+.result-panel .menu-panel-frame .cut-frame-inner {
+  stroke: rgb(var(--tone) / .3);
+}
+
+.result-panel.is-rush .menu-panel-frame polyline {
+  stroke: rgba(255, 205, 160, .55);
+}
+
+.result-body {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  padding: 40px clamp(24px, 6vw, 44px) 32px;
+  text-align: center;
+}
+
+.result-item {
+  animation: settings-item-in .34s cubic-bezier(.2, .75, .25, 1) both;
+  animation-delay: calc(.1s + var(--i, 0) * .055s);
+}
+
+.result-body > div.result-item { width: 100%; }
+
+.result-kicker {
+  margin: 0;
+  color: rgb(var(--tone));
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .26em;
+  text-shadow: 0 0 16px rgb(var(--tone) / .4);
+}
+
+.result-title {
+  margin: 12px 0 0;
+  color: #e6f4f1;
+  font-size: clamp(22px, 5.4vw, 28px);
+  font-weight: 500;
+  letter-spacing: .2em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+/* Daily-level progress, the same little bars as the game's HUD. */
+.result-pips {
+  display: flex;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.result-pips i {
+  width: 28px;
+  height: 3px;
+  background: rgba(255, 255, 255, .16);
+}
+
+.result-pips i.is-done { background: rgb(var(--tone) / .5); }
+
+.result-pips i.is-current {
+  background: rgb(var(--tone));
+  box-shadow: 0 0 10px rgb(var(--tone) / .75);
+}
+
+.result-hero {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin-top: 26px;
+  padding: 18px 0 20px;
+  border-top: 1px solid rgba(174, 198, 204, .22);
+  border-bottom: 1px solid rgba(174, 198, 204, .22);
+  background: linear-gradient(90deg, transparent, rgb(var(--tone) / .08), transparent);
+}
+
+.result-hero small {
+  color: rgba(206, 233, 228, .65);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3em;
+}
+
+.result-hero strong {
+  color: #f0f7f3;
+  font-size: clamp(40px, 11vw, 56px);
+  font-weight: 500;
+  letter-spacing: .05em;
+  line-height: 1.05;
+  text-shadow: 0 0 26px rgb(var(--tone) / .45);
+}
+
+.result-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 6px;
+  width: 100%;
+  margin: 14px 0 0;
+}
+
+.result-stats > div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 8px;
+  border-left: 2px solid rgb(var(--tone) / .6);
+  background: rgba(36, 104, 112, .14);
+}
+
+.result-panel.is-rush .result-stats > div { background: rgba(160, 70, 30, .16); }
+
+.result-stats dt {
+  color: rgba(174, 198, 204, .7);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .24em;
+}
+
+.result-stats dd {
+  margin: 0;
+  color: #f2fbf9;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: .06em;
+}
+
+/* Leaderboard standing, practice note and send status all share one strip. */
+.result-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(174, 198, 204, .22);
+  background: rgba(8, 24, 32, .45);
+  color: rgba(222, 234, 232, .8);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  line-height: 1.5;
+}
+
+.result-status b {
+  color: rgb(var(--tone));
+  font-size: 15px;
+  letter-spacing: .04em;
+}
+
+.result-status.is-ranked {
+  border-color: rgb(var(--tone) / .55);
+  background: rgb(var(--tone) / .1);
+  color: #f2fbf9;
+}
+
+.result-status.is-ranked svg { color: rgb(var(--tone)); }
+.result-status.is-rejected { border-color: rgba(255, 210, 122, .5); color: #ffd27a; }
+.result-status.is-offline { color: rgba(206, 220, 224, .6); }
+
+.result-tag {
+  padding: 2px 7px 2px 9px;
+  border: 1px solid rgb(var(--tone) / .55);
+  color: rgb(var(--tone));
+  font-size: 9px;
+  letter-spacing: .22em;
+}
+
+.result-join {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid rgb(var(--tone) / .3);
+  background: rgba(8, 24, 32, .45);
+  text-align: left;
+}
+
+.result-join .result-kicker { text-shadow: none; font-size: 10px; }
+
+.result-join-row {
+  display: flex;
+  gap: 8px;
+}
+
+.result-input {
+  min-width: 0;
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(174, 198, 204, .3);
+  border-radius: 0;
+  background: rgba(4, 14, 20, .6);
+  color: #f2fbf9;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: .12em;
+  outline: none;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+
+.result-input::placeholder { color: rgba(174, 198, 204, .45); }
+
+.result-input:focus {
+  border-color: rgb(var(--tone) / .75);
+  box-shadow: 0 0 14px rgb(var(--tone) / .18);
+}
+
+.result-input[aria-invalid='true'] { border-color: rgba(255, 210, 122, .75); }
+
+.result-hint-line {
+  margin: 0;
+  color: rgba(174, 198, 204, .6);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .18em;
+}
+
+.result-hint-line.is-warn { color: #ffd27a; }
+
+.result-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-top: 24px;
+}
+
+.result-btn {
+  --edge: rgba(174, 198, 204, .5);
+  position: relative;
+  display: inline-flex;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 0;
+  background: none;
+  color: rgba(222, 240, 236, .86);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  cursor: pointer;
+  transition: color .2s, transform .12s;
+}
+
+.result-btn:active { transform: scale(.98); }
+
+.result-btn-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.result-btn .cut-frame-fill {
+  background: rgba(8, 26, 38, .5);
+  transition: background .2s;
+}
+
+.result-btn:hover,
+.result-btn:focus-visible {
+  --edge: rgba(200, 240, 234, .9);
+  color: #fff;
+  outline: none;
+}
+
+.result-btn:hover .cut-frame-fill,
+.result-btn:focus-visible .cut-frame-fill { background: rgba(30, 90, 105, .45); }
+
+.result-btn.is-primary {
+  --edge: rgb(var(--tone) / .9);
+  color: rgb(var(--tone-soft));
+}
+
+.result-btn.is-primary .cut-frame-fill { background: rgb(var(--tone) / .16); }
+.result-btn.is-primary .cut-frame-line { filter: drop-shadow(0 0 5px rgb(var(--tone) / .55)); }
+
+.result-btn.is-primary:hover,
+.result-btn.is-primary:focus-visible { color: #fff; }
+
+.result-btn.is-primary:hover .cut-frame-fill,
+.result-btn.is-primary:focus-visible .cut-frame-fill { background: rgb(var(--tone) / .32); }
+
+.result-panel.is-rush .result-btn:hover .cut-frame-fill,
+.result-panel.is-rush .result-btn:focus-visible .cut-frame-fill { background: rgba(140, 70, 30, .4); }
+
+.result-hint {
+  margin: 14px 0 0;
+  color: rgba(174, 198, 204, .5);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .24em;
+}
+
+@media (max-width: 520px) {
+  .result-actions { grid-template-columns: 1fr; }
+  .result-hint { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-item { animation: none; }
+}

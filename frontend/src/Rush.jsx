@@ -253,19 +253,31 @@ export function useRushPressure(endsAt, active, onTick) {
 
 // ---------- The screen's furniture ----------
 
-export function RushHud({ solved, endsAt, ranked }) {
+// `versus` ({ opponent, you, them }) turns it into a 1v1 scoreboard.
+export function RushHud({ solved, endsAt, ranked, versus = null }) {
   return (
     <>
       <div className="game-hud rush-hud">
         <div className="rush-hud-left">
           <span className="game-level-label">
             SWIPE RUSH
-            {!ranked && <em className="game-practice-tag" title="Not on the leaderboard: only your first Swipe Rush of the day counts">PRACTICE</em>}
+            {versus && <em className="game-practice-tag" title="A 1v1 match: whoever clears more maps wins">1 V 1</em>}
+            {!versus && !ranked && <em className="game-practice-tag" title="Not on the leaderboard: only your first Swipe Rush of the day counts">PRACTICE</em>}
           </span>
-          <span className="rush-score" role="status" aria-label={`${solved} ${solved === 1 ? 'map' : 'maps'} cleared`}>
-            <b key={solved}>{solved}</b>
-            <small>{solved === 1 ? 'MAP' : 'MAPS'}</small>
-          </span>
+          {versus ? (
+            <span className="rush-versus" role="status" aria-label={`You ${versus.you}, ${versus.opponent} ${versus.them}`}>
+              <small>YOU</small>
+              <b key={`you-${versus.you}`}>{versus.you}</b>
+              <small>–</small>
+              <b key={`them-${versus.them}`} className="is-them">{versus.them}</b>
+              <em>{versus.opponent.toUpperCase()}</em>
+            </span>
+          ) : (
+            <span className="rush-score" role="status" aria-label={`${solved} ${solved === 1 ? 'map' : 'maps'} cleared`}>
+              <b key={solved}>{solved}</b>
+              <small>{solved === 1 ? 'MAP' : 'MAPS'}</small>
+            </span>
+          )}
         </div>
         <div className="rush-clock">
           <Timer size={18} strokeWidth={1.5} />
@@ -285,7 +297,7 @@ export function RushBanner({ banner }) {
   if (!banner) return null;
   return (
     <div key={banner.id} className={`rush-banner is-${banner.kind}`} aria-hidden="true">
-      <span>{BANNER_TEXT[banner.kind]}</span>
+      <span>{banner.text ?? BANNER_TEXT[banner.kind]}</span>
     </div>
   );
 }

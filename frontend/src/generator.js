@@ -266,3 +266,17 @@ export function generateRushBoard(day, index) {
   const { board, start } = rushCache.get(cacheKey);
   return { index, day, board: board.map((row) => [...row]), player: { ...start } };
 }
+
+const matchCache = new Map();
+
+// Board number `index` of a 1v1 match. `seed` comes from the server, one per match, so every match
+// plays on fresh boards (same difficulty curve as Swipe Rush); both players get the same ones.
+export function generateMatchBoard(seed, index) {
+  const cacheKey = `${seed}:${index}`;
+  if (!matchCache.has(cacheKey)) {
+    if (matchCache.size > 600) matchCache.clear();
+    matchCache.set(cacheKey, findBoard(`swipe-cover:mp:${seed}:${index}`, rushRules(index)));
+  }
+  const { board, start } = matchCache.get(cacheKey);
+  return { index, seed, board: board.map((row) => [...row]), player: { ...start } };
+}

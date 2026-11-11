@@ -42,7 +42,7 @@
 }
 
 .shared-brand.to-game {
-  --brand-top: calc(clamp(16px, 3vh, 32px) + 6px);
+  --brand-top: calc(clamp(16px, 3vh, 32px));
   --brand-left: clamp(16px, 3vw, 48px);
 }
 
@@ -161,7 +161,7 @@
 }
 
 .shared-brand.to-game {
-  --brand-top: calc(clamp(16px, 3vh, 32px) + 6px);
+  --brand-top: calc(clamp(16px, 3vh, 32px));
   --brand-left: clamp(16px, 3vw, 48px);
 }
 

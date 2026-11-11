@@ -63,6 +63,20 @@ class ScoreStore:
         self._db.execute("CREATE INDEX IF NOT EXISTS rush_ranking ON rush_scores (day, maps DESC, time_ms, submitted_at)")
         self._db.commit()
 
+    def rename_player(self, player_id: str, name: str) -> None:
+        """A player changed their username: their past scores show the new one."""
+        with self._lock:
+            for table in ("scores", "rush_scores"):
+                self._db.execute(f"UPDATE {table} SET name = ? WHERE player_id = ?", (name, player_id))
+            self._db.commit()
+
+    def delete_player(self, player_id: str) -> None:
+        """An account was deleted: its leaderboard entries go with it."""
+        with self._lock:
+            for table in ("scores", "rush_scores"):
+                self._db.execute(f"DELETE FROM {table} WHERE player_id = ?", (player_id,))
+            self._db.commit()
+
     def submit(self, day: str, level: int, player_id: str, name: str, time_ms: int, moves: int) -> dict:
         """Records a player's first run of a level and returns their standing.
 

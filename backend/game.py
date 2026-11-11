@@ -335,6 +335,18 @@ def generate_rush_map(index: int, day: str | None = None) -> tuple[Board, Positi
     return [list(row) for row in rows], start
 
 
+@lru_cache(maxsize=4096)
+def _match_map(seed: str, index: int) -> tuple[tuple[str, ...], Position]:
+    return _find_board(f"swipe-cover:mp:{seed}:{index}", rush_rules(index))
+
+
+def generate_match_map(seed: str, index: int) -> tuple[Board, Position]:
+    """Board number `index` of a 1v1 match. Each match has its own random `seed`, so every match
+    plays on fresh boards (same difficulty curve as Swipe Rush); both players get the same ones."""
+    rows, start = _match_map(seed, index)
+    return [list(row) for row in rows], start
+
+
 def solves(board: Board, start: Position, route: list[str]) -> bool:
     """True when every move slides the ball and the last one covers the final square."""
     board = [row[:] for row in board]

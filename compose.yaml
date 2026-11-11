@@ -3,8 +3,11 @@ services:
     build: .
     ports:
       - "8000:8000"
+    environment:
+      # Set GOOGLE_CLIENT_ID (in your shell or a .env file next to this file) to turn on "Sign in with Google".
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     volumes:
-      # Keeps the global leaderboard between restarts and rebuilds.
+      # Keeps accounts, the leaderboards and 1v1 ratings between restarts and rebuilds.
       - scores:/data
     restart: unless-stopped
 

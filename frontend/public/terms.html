@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terms of Use · Swipe Cover</title>
+    <meta name="robots" content="index,follow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #07121c; color: #cfe3de; font: 16px/1.7 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      main { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; }
+      a { color: #4ef3d0; }
+      h1 { margin: 0 0 4px; color: #f0f7f3; font-size: 32px; letter-spacing: .04em; }
+      h2 { margin: 36px 0 8px; color: #f0f7f3; font-size: 18px; letter-spacing: .06em; text-transform: uppercase; }
+      .meta { color: #8ba3a0; font-size: 14px; }
+      .back { display: inline-block; margin-bottom: 28px; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
+      ul { padding-left: 20px; }
+      li { margin: 4px 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/">&larr; Swipe Cover</a>
+      <h1>Terms of Use</h1>
+      <p class="meta">Last updated: 11 November 2026</p>
+
+      <p>By playing Swipe Cover or making an account, you agree to these terms. If you do not agree, please do not use the game.</p>
+
+      <h2>Your account</h2>
+      <ul>
+        <li>Give a real email address you can use, and keep your password to yourself. You are responsible for what happens on your account.</li>
+        <li>One person, one account. Do not use someone else's name or pretend to be the game's staff.</li>
+        <li>You can delete your account at any time from the account menu in the game.</li>
+      </ul>
+
+      <h2>Playing fair</h2>
+      <p>The leaderboards are only worth something if they are honest. Do not:</p>
+      <ul>
+        <li>use bots, scripts, solvers or tampered requests to produce scores or 1v1 results, or share solutions to the daily boards in a way that spoils them for others;</li>
+        <li>exploit bugs to gain an advantage, or deliberately lose or collude in ranked matches to move ratings;</li>
+        <li>choose a username, or behave in a way, that is hateful, harassing, sexual, or illegal;</li>
+        <li>attack, overload or try to break into the game or its servers.</li>
+      </ul>
+      <p>We may remove scores, reset ratings, change a username, or suspend or delete an account that breaks these rules, with or without warning.</p>
+
+      <h2>The game</h2>
+      <p>Swipe Cover is provided as it is. We try to keep it running and the daily boards available, but we cannot promise it will always work, be free of mistakes, or keep your scores and ratings forever. We may change, pause or end any part of it, including leaderboards and ratings.</p>
+
+      <h2>Our content</h2>
+      <p>The game, its design and its code belong to its owner. You may play it and share links to it. Please do not copy it and present it as your own.</p>
+
+      <h2>Liability</h2>
+      <p>To the extent the law allows, we are not responsible for losses that come from using, or not being able to use, the game. Nothing here limits any rights you have by law that cannot be limited.</p>
+
+      <h2>Your data</h2>
+      <p>How we handle your information is explained in the <a href="/privacy.html">Privacy Policy</a>.</p>
+
+      <h2>Changes</h2>
+      <p>We may update these terms. The date at the top shows the latest version, and continuing to play after a change means you accept it.</p>
+
+      <h2>Contact</h2>
+      <p id="contact-line">For questions about these terms, see the contact address for this site.</p>
+    </main>
+    <script>
+      fetch('/api/config').then((r) => r.json()).then((config) => {
+        if (!config.contact_email) return;
+        const link = document.createElement('a');
+        link.href = 'mailto:' + config.contact_email;
+        link.textContent = config.contact_email;
+        document.getElementById('contact-line').replaceChildren('For questions about these terms: ', link);
+      }).catch(() => {});
+    </script>
+  </body>
+</html>

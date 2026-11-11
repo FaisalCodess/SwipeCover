@@ -1,0 +1,33 @@
+# Production setup for a single small server (for example a free Oracle Cloud VM):
+# the game behind Caddy, which provides HTTPS. Run from this folder:  docker compose up -d --build
+services:
+  app:
+    build: ..
+    restart: unless-stopped
+    environment:
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-}
+    # Not published to the internet: only Caddy can reach it. That is why it is safe to trust
+    # Caddy's X-Forwarded-For header (without it every player would look like one address and
+    # share the sign-up and login rate limits). One process only: 1v1 matches live in memory.
+    command: ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    volumes:
+      - data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env, for example yourname.duckdns.org}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - app
+
+volumes:
+  data:
+  caddy_data:

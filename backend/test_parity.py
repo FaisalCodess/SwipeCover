@@ -8,20 +8,22 @@ from pathlib import Path
 
 import pytest
 
-from game import generate_map, generate_rush_map
+from game import generate_map, generate_match_map, generate_rush_map
 
 GENERATOR = Path(__file__).resolve().parent.parent / "frontend" / "src" / "generator.js"
 DAYS = [(date(2026, 3, 1) + timedelta(days=offset)).isoformat() for offset in range(30)]
 # Enough boards to cover every Swipe Rush tier (the last one starts at board 28).
 RUSH_BOARDS = 45
 SCRIPT = """
-const { generateDailyBoard, generateRushBoard } = await import(process.argv[1]);
+const { generateDailyBoard, generateRushBoard, generateMatchBoard } = await import(process.argv[1]);
 const days = JSON.parse(process.argv[2]);
 const rushBoards = Number(process.argv[3]);
 const daily = days.flatMap((day) => [1, 2, 3].map((level) => generateDailyBoard(day, level)));
 const rush = days.flatMap((day) => Array.from({ length: rushBoards }, (_, index) => generateRushBoard(day, index)));
+const seeds = ["0123456789abcdef", "fedcba9876543210", "00ff00ff00ff00ff"];
+const match = seeds.flatMap((seed) => Array.from({ length: rushBoards }, (_, index) => generateMatchBoard(seed, index)));
 const shape = ({ board, player }) => [board, player];
-console.log(JSON.stringify({ daily: daily.map(shape), rush: rush.map(shape) }));
+console.log(JSON.stringify({ daily: daily.map(shape), rush: rush.map(shape), match: match.map(shape) }));
 """
 
 
@@ -44,3 +46,11 @@ def test_browser_generator_matches_server():
         for day in DAYS for board, start in (generate_rush_map(index, day) for index in range(RUSH_BOARDS))
     ]
     assert browser["rush"] == server_rush
+
+    # 1v1 matches: the server replays routes on boards the browser built from the match seed.
+    seeds = ["0123456789abcdef", "fedcba9876543210", "00ff00ff00ff00ff"]
+    server_match = [
+        [board, {"row": start[0], "col": start[1]}]
+        for seed in seeds for board, start in (generate_match_map(seed, index) for index in range(RUSH_BOARDS))
+    ]
+    assert browser["match"] == server_match

@@ -1,16 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
   <defs>
-    <radialGradient id="ball" cx="0.34" cy="0.28" r="0.8">
-      <stop offset="0" stop-color="#fff1f2"/>
-      <stop offset="0.22" stop-color="#fca5a5"/>
-      <stop offset="0.58" stop-color="#ef5353"/>
-      <stop offset="1" stop-color="#8b252a"/>
+    <radialGradient id="b" cx="0.34" cy="0.28" r="0.8">
+      <stop offset="0" stop-color="#fff1f2"/><stop offset=".24" stop-color="#fca5a5"/>
+      <stop offset=".6" stop-color="#ef5353"/><stop offset="1" stop-color="#8b252a"/>
     </radialGradient>
   </defs>
-  <rect width="64" height="64" rx="16" fill="#0b1015"/>
-  <circle cx="16" cy="44" r="3.5" fill="#fb7185" fill-opacity=".85"/>
-  <circle cx="28" cy="44" r="3.5" fill="#fb7185" fill-opacity=".85"/>
-  <circle cx="48" cy="44" r="4" fill="#7ce8b9"/>
-  <circle cx="48" cy="20" r="4" fill="#7ce8b9"/>
-  <circle cx="24" cy="22" r="11" fill="url(#ball)"/>
+  <polygon points="0.5,11 11,0.5 35,0.5 39.5,5 39.5,29 29,39.5 5,39.5 0.5,35" fill="#08181f" stroke="#c8f0ea" stroke-opacity=".85"/>
+  <g fill="#4ef3d0" fill-opacity=".1" stroke="#91eedb" stroke-opacity=".3" stroke-width=".5">
+    <rect x="6.25" y="16.25" width="7.5" height="7.5" rx="1.6"/><rect x="6.25" y="26.25" width="7.5" height="7.5" rx="1.6"/><rect x="16.25" y="26.25" width="7.5" height="7.5" rx="1.6"/>
+  </g>
+  <rect x="16.25" y="16.25" width="7.5" height="7.5" rx="1.6" fill="#1b252e" stroke="#aec6cc" stroke-opacity=".5" stroke-width=".6"/>
+  <g fill="#4ef3d0" fill-opacity=".9">
+    <rect x="16.25" y="6.25" width="7.5" height="7.5" rx="1.6"/><rect x="26.25" y="6.25" width="7.5" height="7.5" rx="1.6"/>
+    <rect x="26.25" y="16.25" width="7.5" height="7.5" rx="1.6"/><rect x="26.25" y="26.25" width="7.5" height="7.5" rx="1.6"/>
+  </g>
+  <rect x="6.25" y="6.25" width="7.5" height="7.5" rx="1.6" fill="#4ef3d0" fill-opacity=".9"/>
+  <circle cx="30" cy="30" r="3.4" fill="url(#b)"/>
 </svg>

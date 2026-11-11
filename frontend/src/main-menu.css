@@ -630,7 +630,11 @@
   z-index: -1;
   inset: -39px -53px -40px -85px;
   content: '';
-  background: radial-gradient(ellipse at 43% 47%, rgba(11, 37, 57, .72), rgba(7, 23, 38, .47) 48%, transparent 76%);
+  /* A soft pool of shade behind the menu. It fades to nothing before it reaches the edges of this
+     box (closest-side, plus the mask), so it never shows as a rectangle. */
+  background: radial-gradient(closest-side, rgba(9, 30, 47, .62), rgba(8, 26, 42, .4) 50%, rgba(7, 23, 38, .14) 80%, transparent);
+  -webkit-mask-image: radial-gradient(closest-side, #000 60%, transparent);
+  mask-image: radial-gradient(closest-side, #000 60%, transparent);
 }
 
 .menu-navigation::after {
@@ -894,8 +898,8 @@
 
 .menu-board-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
   margin-top: 6px;
 }
 

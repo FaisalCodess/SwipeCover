@@ -1,0 +1,5 @@
+# Caddy gets and renews the HTTPS certificate by itself, and handles WebSockets (the 1v1 mode) with no extra setup.
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy app:8000
+}

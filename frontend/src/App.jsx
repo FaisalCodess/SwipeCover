@@ -10,17 +10,20 @@ import {
   Play,
   RotateCcw,
   Sun,
+  Swords,
   Trophy,
   Undo2,
   Volume2,
   VolumeX,
   X,
-  Zap,
 } from 'lucide-react';
 import MainMenu, { BoardFrame, CutFrame, keyShape, SkyAbove } from './MainMenu.jsx';
 import BackgroundMusic from './BackgroundMusic.jsx';
 import { CaveBelow, RushBanner, RushHud, useRushPressure } from './Rush.jsx';
 import BoardBall from './BoardBall.jsx';
+import Brand from './Brand.jsx';
+import './brand.css';
+import ResultDialog,{ PracticeStrip, ResultButton, ResultStanding } from './ResultDialog.jsx';
 import { paintDelay, slideDuration } from './motion.js';
 import './main-menu.css';
 import './game-view.css';
@@ -30,7 +33,7 @@ import { beginAttempt, clearAttempt, getAttempt, saveRoute } from './attempts.js
 import { sounds, startMusic, vibrate } from './audio.js';
 import { KEY_ACTIONS, KEY_BINDINGS } from './controls.js';
 import { getAmmanDayKey, getAmmanNextMidnight } from './dailyReset.js';
-import { generateDailyBoard, generateRushBoard } from './generator.js';
+import { generateDailyBoard, generateMatchBoard, generateRushBoard } from './generator.js';
 import {
   beginRush,
   finishRush,
@@ -49,13 +52,21 @@ import {
 import { startRushPulse } from './rushAudio.js';
 import { usePresence } from './usePresence.js';
 import {
-  cleanName,
-  createPlayerId,
+  checkSession,
   fetchDailyBoard,
   flushPendingScores,
+  getSession,
+  getToken,
+  logOut,
+  LoginRequiredError,
   ScoreRejectedError,
   submitScore,
 } from './api.js';
+import AuthDialog from './AuthDialog.jsx';
+import AccountDialog from './AccountDialog.jsx';
+import VersusLobby from './VersusLobby.jsx';
+import { VersusClient } from './versusClient.js';
+import './versus.css';
 
 const STORAGE_KEY = 'swipe-cover-save-v2';
 // Keep in sync with the .camera animations in game-view.css.
@@ -111,15 +122,10 @@ function readSavedState() {
       if (typeof saved.settings?.sfxVolume !== 'number') settings.sfxVolume = oldVolume;
     }
     const leaderboard = saved.leaderboard && typeof saved.leaderboard === 'object' ? saved.leaderboard : {};
-    // The id ties a device's global leaderboard entries together; the name is chosen on the first win.
-    const player = {
-      id: typeof saved.player?.id === 'string' ? saved.player.id : createPlayerId(),
-      name: typeof saved.player?.name === 'string' ? cleanName(saved.player.name) : null,
-    };
-    return { settings, leaderboard: keepFirstRuns(pruneLeaderboard(leaderboard, getAmmanDayKey())), player };
+    return { settings, leaderboard: keepFirstRuns(pruneLeaderboard(leaderboard, getAmmanDayKey())) };
   } catch (error) {
     console.error('Could not read saved game data.', error);
-    return { settings: DEFAULT_SETTINGS, leaderboard: {}, player: { id: createPlayerId(), name: null } };
+    return { settings: DEFAULT_SETTINGS, leaderboard: {} };
   }
 }
 
@@ -238,17 +244,6 @@ function Panel({ children, className = '' }) {
   );
 }
 
-function Brand() {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="relative grid h-11 w-11 place-items-center rounded-2xl border border-mint/20 bg-mint/[0.09]">
-        <span className="h-3 w-3 rounded-full bg-mint shadow-[0_0_18px_rgba(124,232,185,0.85)]" />
-        <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border-2 border-[#0b0f14] bg-rose-400" />
-      </div>
-      <p className="font-display text-lg font-bold leading-tight tracking-tight">swipe cover</p>
-    </div>
-  );
-}
 
 function IconButton({ label, onClick, children, className = '', disabled = false, autoFocus = false }) {
   return (
@@ -516,104 +511,6 @@ function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey }) {
   );
 }
 
-function GlobalStanding({ level, label = `Level ${level}`, globalResult, onJoin }) {
-  const [name, setName] = useState('');
-  const [invalid, setInvalid] = useState(false);
-  const { status } = globalResult;
-
-  if (status === 'needs-name') {
-    return (
-      <form
-        className="mt-5 rounded-2xl border border-line/[0.08] bg-line/[0.03] p-4 text-left"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const cleaned = cleanName(name);
-          setInvalid(!cleaned);
-          if (cleaned) onJoin(cleaned);
-        }}
-      >
-        <label htmlFor="leaderboard-name" className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Join the global leaderboard</label>
-        <div className="mt-2 flex gap-2">
-          <input
-            id="leaderboard-name"
-            value={name}
-            maxLength={16}
-            autoComplete="nickname"
-            placeholder="Your name"
-            onChange={(event) => {
-              setName(event.target.value);
-              setInvalid(false);
-            }}
-            aria-invalid={invalid}
-            aria-describedby="leaderboard-name-hint"
-            className="min-w-0 flex-1 rounded-xl border border-line/10 bg-black/20 px-3 py-2 text-sm text-fg outline-none placeholder:text-faint focus:border-mint/50"
-          />
-          <button type="submit" className="rounded-xl bg-mint px-4 text-sm font-bold text-[#102019] transition hover:bg-[#96f2ca]">Join</button>
-        </div>
-        <p id="leaderboard-name-hint" className={`mt-2 text-xs ${invalid ? 'text-warn' : 'text-faint'}`}>
-          3–16 letters or numbers. Shown publicly next to your times.
-        </p>
-      </form>
-    );
-  }
-
-  const messages = {
-    sending: <span className="inline-flex items-center gap-2 text-muted"><LoaderCircle size={14} className="animate-spin" /> Sending to the global leaderboard…</span>,
-    ranked: <span className="rounded-full bg-mint/15 px-3 py-1 text-xs font-bold text-accent">#{globalResult.rank} on today&apos;s global leaderboard · {label}</span>,
-    offline: <span className="text-faint">Couldn&apos;t reach the leaderboard. Your time will be sent next time you play.</span>,
-    rejected: <span className="text-warn">{globalResult.message}</span>,
-  };
-  return messages[status] ? <p className="mt-4 text-sm">{messages[status]}</p> : null;
-}
-
-// Shown after a replay: it is not saved or sent anywhere, so say what does count.
-function PracticeNote({ firstRun }) {
-  return (
-    <div className="mt-5 rounded-2xl border border-line/[0.08] bg-line/[0.03] p-4 text-left">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">Just for fun</p>
-      <p className="mt-2 text-sm text-muted">
-        Only your first run of each level counts on the leaderboard
-        {firstRun && <>. Yours was <span className="font-semibold tabular-nums text-fg">{formatTime(firstRun.time)}</span></>}.
-      </p>
-    </div>
-  );
-}
-
-function WinDialog({ run, result, firstRun, globalResult, onJoin, onReplay, onNext, onHome }) {
-  const isLast = run.level >= LEVELS;
-  const practice = !run.ranked;
-  return (
-    <div className="fade-in fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <Panel className="pop-in w-full max-w-md p-7 text-center sm:p-9">
-        <div role="dialog" aria-modal="true" aria-labelledby="win-title">
-          <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl border border-mint/20 bg-mint/10 text-accent shadow-glow"><Trophy size={28} /></div>
-          <p className="mt-5 text-xs font-bold uppercase tracking-[0.22em] text-accent">
-            {practice ? `Level ${run.level} · practice run` : `Level ${run.level} of ${LEVELS} complete`}
-          </p>
-          <h2 id="win-title" className="mt-2 font-display text-3xl font-bold">
-            {practice ? 'Nicely played.' : isLast ? 'Daily run complete!' : 'Beautifully done.'}
-          </h2>
-          <p className="mt-2 text-sm text-muted">Every square covered in</p>
-          <p className="mt-2 font-display text-4xl font-bold tabular-nums text-fg">{formatTime(result.time)}</p>
-          <p className="mt-2 text-sm text-muted">{result.moves} {result.moves === 1 ? 'move' : 'moves'}</p>
-          {practice
-            ? <PracticeNote firstRun={firstRun} />
-            : <GlobalStanding level={run.level} globalResult={globalResult} onJoin={onJoin} />}
-          <div className="mt-7 grid gap-3 sm:grid-cols-2">
-            <SecondaryButton onClick={onReplay}><RotateCcw size={16} /> Play again</SecondaryButton>
-            {isLast ? (
-              <PrimaryButton onClick={onHome} autoFocus><Trophy size={16} /> Back to menu</PrimaryButton>
-            ) : (
-              <PrimaryButton onClick={onNext} autoFocus><span>Next level</span><ArrowRight size={17} /></PrimaryButton>
-            )}
-          </div>
-          <p className="mt-4 hidden text-xs text-faint sm:block">Press Enter to continue</p>
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
 // A line for how a Swipe Rush went, by boards cleared.
 function rushVerdict(maps) {
   if (maps === 0) return 'Not this time.';
@@ -624,16 +521,33 @@ function rushVerdict(maps) {
   return 'Unreal.';
 }
 
-// Shown after a Swipe Rush replay: it is not saved or sent anywhere, so say what does count.
-function RushPracticeNote({ first }) {
+function WinDialog({ run, result, firstRun, globalResult, onJoin, onReplay, onNext, onHome, completedLevels }) {
+  const isLast = run.level >= LEVELS;
+  const practice = !run.ranked;
+  const stats = [{ label: 'MOVES', value: result.moves }];
+  if (practice && firstRun) stats.push({ label: 'FIRST RUN', value: formatTime(firstRun.time) });
   return (
-    <div className="mt-5 rounded-2xl border border-line/[0.08] bg-line/[0.03] p-4 text-left">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ffb36b]">Just for fun</p>
-      <p className="mt-2 text-sm text-muted">
-        Only your first Swipe Rush of the day counts on the leaderboard
-        {first && <>. Yours was <span className="font-semibold tabular-nums text-fg">{first.maps} {first.maps === 1 ? 'map' : 'maps'}</span></>}.
-      </p>
-    </div>
+    <ResultDialog
+      tone="level"
+      titleId="win-title"
+      kicker={practice ? `LEVEL ${run.level} · PRACTICE RUN` : `LEVEL ${run.level} OF ${LEVELS}`}
+      title={practice ? 'Nicely played' : isLast ? 'Daily run complete' : 'Level cleared'}
+      pips={{ total: LEVELS, current: run.level, done: completedLevels }}
+      hero={{ label: 'EVERY SQUARE COVERED IN', value: formatTime(result.time) }}
+      stats={stats}
+      standing={practice
+        ? <PracticeStrip>ONLY YOUR FIRST RUN OF EACH LEVEL COUNTS</PracticeStrip>
+        : <ResultStanding label={`Level ${run.level}`} globalResult={globalResult} onLogin={onJoin} />}
+      actions={(
+        <>
+          <ResultButton onClick={onReplay}><RotateCcw size={14} strokeWidth={1.6} /> PLAY AGAIN</ResultButton>
+          {isLast
+            ? <ResultButton primary autoFocus onClick={onHome}><Trophy size={14} strokeWidth={1.6} /> MENU</ResultButton>
+            : <ResultButton primary autoFocus onClick={onNext}>NEXT LEVEL <ArrowRight size={14} strokeWidth={1.6} /></ResultButton>}
+        </>
+      )}
+      hint="PRESS ENTER TO CONTINUE"
+    />
   );
 }
 
@@ -641,44 +555,34 @@ function RushPracticeNote({ first }) {
 // leaderboard standing (a first run) or a note that a replay is just for fun.
 function RushResults({ result, first, globalResult, onJoin, onReplay, onHome }) {
   const practice = !result.ranked;
+  const stats = [{ label: 'MOVES', value: result.moves }];
+  if (result.maps > 0) stats.push({ label: 'LAST CLEAR', value: formatTime(result.time) });
+  if (practice && first) stats.push({ label: 'FIRST RUN', value: `${first.maps} ${first.maps === 1 ? 'MAP' : 'MAPS'}` });
   return (
-    <div className="fade-in fixed inset-0 z-40 grid place-items-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm">
-      <Panel className="pop-in w-full max-w-md p-7 text-center sm:p-9">
-        <div role="dialog" aria-modal="true" aria-labelledby="rush-title">
-          <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl border border-[#ff9a52]/25 bg-[#ff9a52]/10 text-[#ffb36b]"><Zap size={28} /></div>
-          <p className="mt-5 text-xs font-bold uppercase tracking-[0.22em] text-[#ffb36b]">
-            {practice ? 'Swipe Rush · practice run' : "Swipe Rush · time's up"}
-          </p>
-          <h2 id="rush-title" className="mt-2 font-display text-3xl font-bold">{rushVerdict(result.maps)}</h2>
-          <p className="mt-4 font-display text-6xl font-bold tabular-nums text-fg">{result.maps}</p>
-          <p className="mt-1 text-xs font-bold uppercase tracking-[0.24em] text-muted">{result.maps === 1 ? 'map' : 'maps'} cleared</p>
-          <p className="mt-3 text-sm text-muted">
-            {result.moves} {result.moves === 1 ? 'move' : 'moves'}
-            {result.maps > 0 && <> · the last one at <span className="tabular-nums">{formatTime(result.time)}</span></>}
-          </p>
-          {practice
-            ? <RushPracticeNote first={first} />
-            : <GlobalStanding label="Swipe Rush" globalResult={globalResult} onJoin={onJoin} />}
-          <div className="mt-7 grid gap-3 sm:grid-cols-2">
-            <SecondaryButton onClick={onReplay}><RotateCcw size={16} /> Play again</SecondaryButton>
-            {/* Ember instead of the usual mint, to match the cave. */}
-            <PrimaryButton
-              onClick={onHome}
-              autoFocus
-              className="!bg-[#ffb36b] !text-[#2a1408] shadow-[#ff9a52]/20 hover:!bg-[#ffc58f] focus-visible:!outline-[#ffb36b]"
-            >
-              <Trophy size={16} /> Back to menu
-            </PrimaryButton>
-          </div>
-        </div>
-      </Panel>
-    </div>
+    <ResultDialog
+      tone="rush"
+      titleId="rush-title"
+      kicker={practice ? 'SWIPE RUSH · PRACTICE RUN' : "SWIPE RUSH · TIME'S UP"}
+      title={rushVerdict(result.maps).replace(/\.$/, '')}
+      hero={{ label: result.maps === 1 ? 'MAP CLEARED' : 'MAPS CLEARED', value: result.maps }}
+      stats={stats}
+      standing={practice
+        ? <PracticeStrip>ONLY YOUR FIRST SWIPE RUSH OF THE DAY COUNTS</PracticeStrip>
+        : <ResultStanding label="Swipe Rush" globalResult={globalResult} onLogin={onJoin} />}
+      actions={(
+        <>
+          <ResultButton onClick={onReplay}><RotateCcw size={14} strokeWidth={1.6} /> PLAY AGAIN</ResultButton>
+          <ResultButton primary autoFocus onClick={onHome}><Trophy size={14} strokeWidth={1.6} /> MENU</ResultButton>
+        </>
+      )}
+    />
   );
 }
 
 // The run for board `index` of a day's Swipe Rush, with any moves already made on it.
-function makeRushRun({ day, index, ranked, route = [] }) {
-  const data = generateRushBoard(day, index);
+// In a 1v1 the boards come from the match's seed instead of the day.
+function makeRushRun({ day, seed, index, ranked, route = [] }) {
+  const data = seed ? generateMatchBoard(seed, index) : generateRushBoard(day, index);
   const initialBoard = data.board.map((row) => [...row]);
   const resumed = replayRoute(initialBoard, data.player, route);
   return {
@@ -697,12 +601,56 @@ function makeRushRun({ day, index, ranked, route = [] }) {
   };
 }
 
+// The end of a 1v1. The server's verdict arrives a moment after time runs out, so until then
+// it shows the score as the player last saw it.
+function VersusResults({ rush, outcome, onAgain, onHome }) {
+  const you = outcome?.you ?? rush.you;
+  const them = outcome?.them ?? rush.them;
+  const verdict = outcome ? { win: 'Victory', lose: 'Defeat', draw: 'Draw' }[outcome.outcome] : 'Final score';
+  const stats = [{ label: 'OPPONENT', value: rush.opponent }];
+  if (outcome?.ranked && outcome.rating !== null) {
+    stats.push({ label: 'RATING', value: `${outcome.rating} (${outcome.delta >= 0 ? '+' : ''}${outcome.delta})` });
+  } else if (outcome) {
+    stats.push({ label: 'MATCH', value: 'FRIENDLY' });
+  }
+  return (
+    <ResultDialog
+      tone="rush"
+      titleId="versus-result-title"
+      kicker={outcome && !outcome.ranked ? 'SWIPE RUSH · 1V1 · FRIENDLY' : 'SWIPE RUSH · 1V1'}
+      title={verdict}
+      hero={{ label: 'YOU · THEM', value: `${you} – ${them}` }}
+      stats={stats}
+      standing={outcome ? null : <p className="result-status" role="status"><LoaderCircle size={14} className="menu-spin" /> CONFIRMING THE FINAL SCORE</p>}
+      actions={outcome ? (
+        <>
+          <ResultButton onClick={onAgain}><Swords size={14} strokeWidth={1.6} /> FIND ANOTHER</ResultButton>
+          <ResultButton primary autoFocus onClick={onHome}><Trophy size={14} strokeWidth={1.6} /> MENU</ResultButton>
+        </>
+      ) : <ResultButton primary onClick={onHome}><Trophy size={14} strokeWidth={1.6} /> MENU</ResultButton>}
+    />
+  );
+}
+
 export default function App() {
   const initial = useRef(null);
   initial.current ||= readSavedState();
   const [settings, setSettings] = useState(initial.current.settings);
   const [leaderboard, setLeaderboard] = useState(initial.current.leaderboard);
-  const [player, setPlayer] = useState(initial.current.player);
+  // Who is logged in (from the saved login), as { id, name }. Both are null for a guest.
+  const [player, setPlayer] = useState(() => {
+    const saved = getSession();
+    return saved ? { id: saved.user.id, name: saved.user.username } : { id: null, name: null };
+  });
+  const [accountDialog, setAccountDialog] = useState(null); // 'rename' | 'delete' | null
+  const [showAuth, setShowAuth] = useState(null); // null, or { reason } while the login dialog is open
+  const authIntent = useRef(null); // what to do once logged in: 'versus'
+  const [lobby, setLobby] = useState(null); // the 1v1 lobby: null, or { status, code?, error? }
+  const [versusResult, setVersusResult] = useState(null);
+  const versusClient = useRef(null);
+  const reconnectTries = useRef(0);
+  const reopenLobby = useRef(false);
+  const openVersusRef = useRef(null);
   const [globalResult, setGlobalResult] = useState({ status: 'idle' });
   const playerRef = useRef(player);
   // Bumped on every new run, so a late leaderboard reply never lands on the wrong level.
@@ -766,6 +714,14 @@ export default function App() {
   // True once a level's first run has been finished that day. Every run after that is practice.
   const hasFirstRun = useCallback((day, level) => leaderboardRef.current[day]?.levels?.[level]?.length > 0, []);
 
+  // The server no longer accepts the saved login (it expired, or was ended elsewhere).
+  const dropLogin = useCallback(() => {
+    logOut();
+    const guest = { id: null, name: null };
+    playerRef.current = guest;
+    setPlayer(guest);
+  }, []);
+
   const changePhase = useCallback((next) => {
     phaseRef.current = next;
     setPhase(next);
@@ -805,16 +761,30 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, leaderboard, player }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, leaderboard }));
     } catch (saveError) {
       console.error('Could not save game data.', saveError);
       setStorageError('Your browser is blocking storage, so settings and times will not be kept.');
     }
-  }, [settings, leaderboard, player]);
+  }, [settings, leaderboard]);
 
   // Times finished while offline are sent the next time the game opens.
   useEffect(() => {
     flushPendingScores();
+  }, []);
+
+  // A saved login is checked with the server; if it has expired the player is a guest again.
+  useEffect(() => {
+    if (!getToken()) return undefined;
+    const controller = new AbortController();
+    checkSession(controller.signal).then((user) => {
+      if (!user && !controller.signal.aborted) {
+        const guest = { id: null, name: null };
+        playerRef.current = guest;
+        setPlayer(guest);
+      }
+    });
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
@@ -890,16 +860,17 @@ export default function App() {
       for (const [key, [first]] of Object.entries(levels || {})) {
         const level = Number(key);
         if (!first || first.sent || !first.route || (skip?.day === day && skip.level === level)) continue;
-        submitScore({ day, level, player_id: playerRef.current.id, name, time_ms: Math.round(first.time), route: first.route })
-          .catch(() => {})
-          .finally(() => markRunSent(day, level));
+        submitScore({ day, level, time_ms: Math.round(first.time), route: first.route })
+          .then(() => true, (error) => !(error instanceof LoginRequiredError))
+          .then((handled) => handled && markRunSent(day, level));
       }
     }
     for (const { day, result: run } of unsentRushRuns()) {
       if (skip?.rush && skip.day === day) continue;
-      submitScore({ day, player_id: playerRef.current.id, name, time_ms: Math.round(run.time), routes: run.routes })
-        .catch(() => {})
-        .finally(() => {
+      submitScore({ day, time_ms: Math.round(run.time), routes: run.routes })
+        .then(() => true, (error) => !(error instanceof LoginRequiredError))
+        .then((handled) => {
+          if (!handled) return;
           markRushSent(day);
           if (day === dayKeyRef.current) setRushInfo(rushSnapshot(day));
         });
@@ -1006,29 +977,34 @@ export default function App() {
   // Sends a first run to the global leaderboard; the server replays the route to verify it.
   const submitGlobal = useCallback(async (completed, time, name = playerRef.current.name) => {
     if (!name) {
-      setGlobalResult({ status: 'needs-name' });
+      // Not logged in: the run stays saved here and goes out when they log in.
+      setGlobalResult({ status: 'needs-login' });
       return;
     }
     const token = submission.current;
     setGlobalResult({ status: 'sending' });
+    let keep = false;
     try {
       const standing = await submitScore({
         day: completed.day,
         level: completed.level,
-        player_id: playerRef.current.id,
-        name,
         time_ms: Math.round(time),
         route: completed.route,
       });
       if (token === submission.current) setGlobalResult({ status: 'ranked', rank: standing.rank });
     } catch (error) {
+      if (error instanceof LoginRequiredError) {
+        keep = true;
+        dropLogin();
+      }
       if (token !== submission.current) return;
-      if (error instanceof ScoreRejectedError) setGlobalResult({ status: 'rejected', message: error.message });
+      if (error instanceof LoginRequiredError) setGlobalResult({ status: 'needs-login' });
+      else if (error instanceof ScoreRejectedError) setGlobalResult({ status: 'rejected', message: error.message });
       else setGlobalResult({ status: 'offline' });
     } finally {
-      markRunSent(completed.day, completed.level);
+      if (!keep) markRunSent(completed.day, completed.level);
     }
-  }, [markRunSent]);
+  }, [dropLogin, markRunSent]);
 
   // ---------- Swipe Rush ----------
   // Five minutes, as many boards as you can clear. `rush` is the run being played and `run` is
@@ -1036,10 +1012,10 @@ export default function App() {
   // when it begins (see rush.js) and nothing the player does moves it.
 
   // A big word over the board (READY, GO!, TIME'S UP). `duration` hides it again after a while.
-  const showBanner = useCallback((kind, duration = 0) => {
+  const showBanner = useCallback((kind, duration = 0, text) => {
     window.clearTimeout(bannerTimer.current);
     bannerCount.current += 1;
-    setBanner({ kind, id: bannerCount.current });
+    setBanner({ kind, id: bannerCount.current, text });
     // A plain timer, not `later`, because moving to the next board cancels `later` timers.
     if (duration) bannerTimer.current = window.setTimeout(() => setBanner(null), duration);
   }, []);
@@ -1052,29 +1028,35 @@ export default function App() {
       return;
     }
     if (!name) {
-      setGlobalResult({ status: 'needs-name' });
+      setGlobalResult({ status: 'needs-login' });
       return;
     }
     const token = submission.current;
     setGlobalResult({ status: 'sending' });
+    let keep = false;
     try {
       const standing = await submitScore({
         day,
-        player_id: playerRef.current.id,
-        name,
         time_ms: Math.round(outcome.time),
         routes: outcome.routes,
       });
       if (token === submission.current) setGlobalResult({ status: 'ranked', rank: standing.rank });
     } catch (error) {
+      if (error instanceof LoginRequiredError) {
+        keep = true;
+        dropLogin();
+      }
       if (token !== submission.current) return;
-      if (error instanceof ScoreRejectedError) setGlobalResult({ status: 'rejected', message: error.message });
+      if (error instanceof LoginRequiredError) setGlobalResult({ status: 'needs-login' });
+      else if (error instanceof ScoreRejectedError) setGlobalResult({ status: 'rejected', message: error.message });
       else setGlobalResult({ status: 'offline' });
     } finally {
-      markRushSent(day);
-      if (day === dayKeyRef.current) setRushInfo(rushSnapshot(day));
+      if (!keep) {
+        markRushSent(day);
+        if (day === dayKeyRef.current) setRushInfo(rushSnapshot(day));
+      }
     }
-  }, []);
+  }, [dropLogin]);
 
   // Puts a board on screen with everything about the last one reset.
   const loadRushBoard = useCallback((nextRun) => {
@@ -1091,6 +1073,18 @@ export default function App() {
     if (!current || current.over) return;
     clearPending();
     commitRush({ ...current, over: true });
+    if (current.versus) {
+      // The server keeps the score and sends the result a moment later.
+      changePhase('timeup');
+      showBanner('time');
+      sfx('timeUp');
+      vibrate([30, 40, 30, 40, 90]);
+      later(() => {
+        setBanner(null);
+        changePhase('rushDone');
+      }, RUSH_TIMEUP_MS);
+      return;
+    }
     const counted = { maps: current.solved, time: current.lastAt, moves: current.moves, routes: [] };
     const outcome = current.ranked ? (finishRush(current.day) ?? counted) : counted;
     setResult({ mode: 'rush', ranked: current.ranked, maps: outcome.maps, time: outcome.time, moves: outcome.moves });
@@ -1119,6 +1113,8 @@ export default function App() {
     }
     const at = now - current.startedAt;
     if (completed.ranked) recordRushMap(completed.day, completed.route, at);
+    // In a 1v1 the server scores it, after checking the route against the same board.
+    if (current.versus) versusClient.current?.send({ type: 'solved', index: completed.index, route: completed.route });
     const solved = current.solved + 1;
     commitRush({ ...current, solved, moves: current.moves + completed.route.length, lastAt: at });
     changePhase('advancing');
@@ -1127,7 +1123,7 @@ export default function App() {
     later(() => {
       const live = rushRef.current;
       if (!live || live.over) return;
-      loadRushBoard(makeRushRun({ day: live.day, index: live.solved, ranked: live.ranked }));
+      loadRushBoard(makeRushRun({ day: live.day, seed: live.seed, index: live.solved, ranked: live.ranked }));
       changePhase('playing');
     }, slideMs + RUSH_ADVANCE_MS);
   }, [changePhase, commitRush, endRush, later, loadRushBoard, sfx]);
@@ -1139,7 +1135,10 @@ export default function App() {
     if (!current || current.over) return;
     const isNew = current.startedAt === null;
     let { startedAt, endsAt } = current;
-    if (isNew && current.ranked) {
+    if (isNew && current.versus) {
+      // A 1v1 starts when the server says, the same moment for both players.
+      ({ plannedStart: startedAt, plannedEnd: endsAt } = current);
+    } else if (isNew && current.ranked) {
       // The day's first run: its deadline is written down right here.
       ({ startedAt, endsAt } = beginRush(current.day));
       setRushInfo(rushSnapshot(current.day));
@@ -1221,12 +1220,188 @@ export default function App() {
     later(() => landRush(), RUSH_READY_MS);
   }, [changePhase, commitRush, landRush, later, loadRushBoard, showBanner]);
 
-  const joinLeaderboard = useCallback((name) => {
-    const nextPlayer = { ...playerRef.current, name };
-    playerRef.current = nextPlayer;
-    setPlayer(nextPlayer);
+  // ---------- 1v1 ----------
+  // The lobby (find an opponent, or play a friend with a code) is a dialog on the menu. When the
+  // server pairs two players, both fall into the cave together and the clock starts on its word.
+
+  const closeVersusClient = useCallback(() => {
+    versusClient.current?.close();
+    versusClient.current = null;
+  }, []);
+
+  const startVersusMatch = useCallback((match) => {
+    const live = rushRef.current;
+    if (live?.versus && !live.over && live.matchId === match.match_id) {
+      // Reconnected to the match already on screen: carry on, trusting the server's count.
+      commitRush({ ...live, you: match.you, them: match.them });
+      if (match.you < live.solved) {
+        commitRush({ ...rushRef.current, solved: match.you });
+        loadRushBoard(makeRushRun({ day: live.day, seed: live.seed, index: match.you, ranked: false }));
+        if (phaseRef.current === 'advancing') changePhase('playing');
+      }
+      return;
+    }
+    if (travelRef.current || screenRef.current !== 'home') return;
+    const day = dayKeyRef.current;
+    const startsAt = Date.now() + match.starts_in_ms;
+    setLobby(null);
+    setResult(null);
+    setVersusResult(null);
+    setBanner(null);
+    reconnectTries.current = 0;
+    commitRush({
+      day,
+      versus: true,
+      matchId: match.match_id,
+      seed: match.seed,
+      opponent: match.opponent,
+      ranked: false,
+      startedAt: null,
+      endsAt: null,
+      plannedStart: startsAt,
+      plannedEnd: startsAt + match.remaining_ms,
+      solved: match.you,
+      you: match.you,
+      them: match.them,
+      moves: 0,
+      lastAt: 0,
+      over: false,
+    });
+    loadRushBoard(makeRushRun({ day, seed: match.seed, index: match.you, ranked: false }));
+    changePhase('ready');
+    sfx('dive');
+
+    // The camera has landed: READY, a 3-2-1, then the clock starts at the server's start time.
+    const awaitStart = () => {
+      const remaining = startsAt - Date.now();
+      if (remaining > 0) showBanner('ready');
+      [3, 2, 1].forEach((count) => {
+        if (remaining > count * 1000) later(() => showBanner('count', 900, String(count)), remaining - count * 1000);
+      });
+      later(() => landRush(), Math.max(0, remaining));
+    };
+    if (prefersReducedMotion()) {
+      screenRef.current = 'rush';
+      setScreen('rush');
+      setGameLive(true);
+      awaitStart();
+      window.scrollTo({ top: 0 });
+      return;
+    }
+    travelRef.current = 'dive';
+    setGameLive(false);
+    setTravel('dive');
+    window.setTimeout(() => setGameLive(true), TRAVEL_MS - UI_LEAD_MS);
+    window.setTimeout(() => {
+      awaitStart();
+      screenRef.current = 'rush';
+      setScreen('rush');
+      setTravel(null);
+      travelRef.current = null;
+    }, TRAVEL_MS);
+  }, [changePhase, commitRush, landRush, later, loadRushBoard, sfx, showBanner]);
+
+  const handleVersusMessage = useCallback((message) => {
+    switch (message.type) {
+      case 'hello':
+        setLobby((current) => (current?.status === 'connecting' ? { status: 'menu' } : current));
+        break;
+      case 'searching':
+        setLobby({ status: 'searching' });
+        break;
+      case 'room':
+        setLobby({ status: 'room', code: message.code });
+        break;
+      case 'idle':
+        setLobby((current) => (current ? { status: 'menu' } : current));
+        break;
+      case 'error':
+        setLobby((current) => (current ? { status: 'menu', error: message.message } : current));
+        break;
+      case 'matched':
+        startVersusMatch(message);
+        break;
+      case 'score': {
+        const live = rushRef.current;
+        if (live?.versus) commitRush({ ...live, you: message.you, them: message.them });
+        break;
+      }
+      case 'result':
+        setVersusResult(message);
+        break;
+      default:
+        break;
+    }
+  }, [commitRush, startVersusMatch]);
+
+  const handleVersusClosed = useCallback(() => {
+    const live = rushRef.current;
+    if (live?.versus && !live.over && reconnectTries.current < 6) {
+      // A dropped connection mid-match: try again, and the server puts the player back in it.
+      reconnectTries.current += 1;
+      window.setTimeout(() => versusClient.current?.connect(), 800 * reconnectTries.current);
+      return;
+    }
+    setLobby((current) => (current ? { status: 'offline' } : current));
+  }, []);
+
+  const connectVersus = useCallback(() => {
+    closeVersusClient();
+    setLobby({ status: 'connecting' });
+    const client = new VersusClient({ onMessage: handleVersusMessage, onClose: handleVersusClosed });
+    versusClient.current = client;
+    client.connect();
+  }, [closeVersusClient, handleVersusClosed, handleVersusMessage]);
+
+  const openVersus = useCallback(() => {
+    if (travelRef.current || screenRef.current !== 'home') return;
+    if (!playerRef.current.name) {
+      authIntent.current = 'versus';
+      setShowAuth({ reason: 'Log in to play 1v1' });
+      return;
+    }
+    connectVersus();
+  }, [connectVersus]);
+  openVersusRef.current = openVersus;
+
+  const sendVersus = useCallback((message) => {
+    if (!versusClient.current?.send(message)) setLobby({ status: 'offline' });
+  }, []);
+
+  const closeLobby = useCallback(() => {
+    versusClient.current?.send({ type: 'cancel' });
+    closeVersusClient();
+    setLobby(null);
+  }, [closeVersusClient]);
+
+  // ---------- Logging in and out ----------
+
+  const openAuth = useCallback((reason) => {
+    authIntent.current = null;
+    setShowAuth({ reason });
+  }, []);
+
+  const closeAuth = useCallback(() => {
+    authIntent.current = null;
+    setShowAuth(null);
+  }, []);
+
+  // Logged in (or signed up): whatever was waiting for a name goes out under the account now.
+  const handleLoggedIn = useCallback((user) => {
+    const name = user.username;
+    playerRef.current = { id: user.id, name };
+    setPlayer(playerRef.current);
+    const intent = authIntent.current;
+    authIntent.current = null;
+    setShowAuth(null);
+    flushPendingScores();
+    if (intent === 'versus') {
+      openVersusRef.current?.();
+      return;
+    }
     const current = runRef.current;
-    if (current?.mode === 'rush') {
+    const onResults = screenRef.current !== 'home' && current;
+    if (onResults && current.mode === 'rush') {
       // The Swipe Rush results are showing: this run, and anything else unsent, joins the board.
       const showing = Boolean(current.ranked && result?.mode === 'rush');
       if (showing) {
@@ -1236,11 +1411,20 @@ export default function App() {
       sendUnsentRuns(name, showing ? { day: current.day, rush: true } : null);
       return;
     }
-    const showing = Boolean(current?.ranked && result);
+    const showing = Boolean(onResults && current.ranked && result);
     if (showing) submitGlobal(current, result.time, name);
-    // Levels cleared earlier today, before there was a name to post them under, join the board too.
+    // Levels cleared earlier today, before there was an account to post them under, join the board too.
     sendUnsentRuns(name, showing ? { day: current.day, level: current.level } : null);
   }, [result, sendUnsentRuns, submitGlobal, submitRushRun]);
+
+  const handleLogout = useCallback(() => {
+    logOut();
+    const guest = { id: null, name: null };
+    playerRef.current = guest;
+    setPlayer(guest);
+    closeVersusClient();
+    setLobby(null);
+  }, [closeVersusClient]);
 
   const finishRun = useCallback((completed, time, slideMs) => {
     moveQueue.current = [];
@@ -1385,18 +1569,29 @@ export default function App() {
     // Leaving the cave puts the Swipe Rush in play away. A ranked one keeps its place in the
     // store and its deadline keeps counting; a replay is simply dropped.
     if (screenRef.current === 'rush') {
+      if (rushRef.current?.versus) {
+        closeVersusClient();
+        setVersusResult(null);
+      }
       commitRush(null);
       setBanner(null);
       setRushInfo(rushSnapshot(dayKeyRef.current));
     }
     screenRef.current = 'home';
     setScreen('home');
-  }, [clearPending, commitRush]);
+    if (reopenLobby.current) {
+      reopenLobby.current = false;
+      window.setTimeout(() => openVersusRef.current?.(), 0);
+    }
+  }, [clearPending, closeVersusClient, commitRush]);
 
   // Game -> menu: the game fades out, then the camera pans back. From a level it pans down out
   // of the sky; from the cave it climbs up out of the ground.
   const goHome = useCallback(() => {
     if (travelRef.current) return;
+    const live = rushRef.current;
+    if (screenRef.current === 'rush' && live?.versus && !live.over
+      && !window.confirm('Leave the match? Your opponent keeps scoring, and you will lose.')) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       returnHome();
       return;
@@ -1417,6 +1612,7 @@ export default function App() {
   useEffect(() => {
     function handleKeyDown(event) {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       const key = event.key.toLowerCase();
       if (showSettingsRef.current) {
         if (key === 'escape') closeSettings();
@@ -1533,8 +1729,7 @@ export default function App() {
         disabled={screen === 'home' || Boolean(travel)}
         aria-label={screen === 'home' ? 'Swipe Cover' : 'Back to menu'}
       >
-        <span className="menu-brand-orb" aria-hidden="true"><i /></span>
-        <span className="menu-brand-name">SWIPE COVER</span>
+        <Brand />
       </button>
       <div className={`camera ${travel ? `camera-${travel}` : ''}`}>
       {dailyRun && (screen === 'game' || travel) && (
@@ -1613,6 +1808,11 @@ export default function App() {
         <MainMenu
           onPlay={startLevel}
           onRush={startRush}
+          onVersus={openVersus}
+          onLogin={() => openAuth()}
+          onLogout={handleLogout}
+          onRename={() => setAccountDialog('rename')}
+          onDelete={() => setAccountDialog('delete')}
           settings={settings}
           onSettingsChange={changeSettings}
           leaving={travel === 'up' || travel === 'dive' || ((travel === 'down' || travel === 'rise') && !menuReveal)}
@@ -1652,7 +1852,12 @@ export default function App() {
           </header>
 
           <div className="game-stage" style={{ '--board-ratio': rushRun.board[0].length / rushRun.board.length }}>
-            <RushHud solved={rush.solved} endsAt={rush.endsAt} ranked={rush.ranked} />
+            <RushHud
+              solved={rush.solved}
+              endsAt={rush.endsAt}
+              ranked={rush.ranked}
+              versus={rush.versus ? { opponent: rush.opponent, you: rush.you, them: rush.them } : null}
+            />
 
             <GameBoard
               run={rushRun}
@@ -1696,24 +1901,65 @@ export default function App() {
           result={result}
           firstRun={leaderboard[run.day]?.levels?.[run.level]?.[0]}
           globalResult={globalResult}
-          onJoin={joinLeaderboard}
+          onJoin={() => openAuth('Log in to post your time')}
           onReplay={replayLevel}
           // Past midnight the next level belongs to a new day that has not been started: back to the menu.
           onNext={() => { if (!startLevel(run.level + 1)) goHome(); }}
           onHome={goHome}
+          completedLevels={completedLevels}
         />
       )}
 
-      {screen === 'rush' && !travel && rushRun && phase === 'rushDone' && result?.mode === 'rush' && (
+      {screen === 'rush' && !travel && rushRun && phase === 'rushDone' && rush?.versus && (
+        <VersusResults
+          rush={rush}
+          outcome={versusResult}
+          onAgain={() => { reopenLobby.current = true; goHome(); }}
+          onHome={goHome}
+        />
+      )}
+
+      {screen === 'rush' && !travel && rushRun && phase === 'rushDone' && !rush?.versus && result?.mode === 'rush' && (
         <RushResults
           result={result}
           first={rushInfo.status === 'finished' ? rushInfo.result : null}
           globalResult={globalResult}
-          onJoin={joinLeaderboard}
+          onJoin={() => openAuth('Log in to post your score')}
           onReplay={restartRush}
           onHome={goHome}
         />
       )}
+
+      {lobby && (
+        <VersusLobby
+          lobby={lobby}
+          onQueue={() => sendVersus({ type: 'queue' })}
+          onCreate={() => sendVersus({ type: 'create' })}
+          onJoin={(code) => sendVersus({ type: 'join', code })}
+          onCancel={() => sendVersus({ type: 'cancel' })}
+          onClose={closeLobby}
+          onRetry={connectVersus}
+        />
+      )}
+
+      {accountDialog && (
+        <AccountDialog
+          mode={accountDialog}
+          player={player}
+          onClose={() => setAccountDialog(null)}
+          onRenamed={(user) => {
+            playerRef.current = { id: user.id, name: user.username };
+            setPlayer(playerRef.current);
+            setAccountDialog(null);
+          }}
+          onDeleted={() => {
+            handleLogout();
+            setAccountDialog(null);
+          }}
+        />
+      )}
+
+      {showAuth && <AuthDialog reason={showAuth.reason} onClose={closeAuth} onSuccess={handleLoggedIn} />}
 
       {settingsDialog.mounted && (
         <SettingsDialog settings={settings} onSettingsChange={changeSettings} onClose={closeSettings} closing={settingsDialog.closing} />

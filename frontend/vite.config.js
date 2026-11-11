@@ -10,11 +10,11 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
-    proxy: { '/api': apiTarget },
+    proxy: { '/api': { target: apiTarget, ws: true } },
   },
   preview: {
     host: '0.0.0.0',
     port: 4173,
-    proxy: { '/api': apiTarget },
+    proxy: { '/api': { target: apiTarget, ws: true } },
   },
 });

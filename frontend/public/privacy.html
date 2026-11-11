@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy · Swipe Cover</title>
+    <meta name="robots" content="index,follow" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #07121c; color: #cfe3de; font: 16px/1.7 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+      main { max-width: 720px; margin: 0 auto; padding: 48px 20px 80px; }
+      a { color: #4ef3d0; }
+      h1 { margin: 0 0 4px; color: #f0f7f3; font-size: 32px; letter-spacing: .04em; }
+      h2 { margin: 36px 0 8px; color: #f0f7f3; font-size: 18px; letter-spacing: .06em; text-transform: uppercase; }
+      .meta { color: #8ba3a0; font-size: 14px; }
+      .back { display: inline-block; margin-bottom: 28px; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; }
+      ul { padding-left: 20px; }
+      li { margin: 4px 0; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/">&larr; Swipe Cover</a>
+      <h1>Privacy Policy</h1>
+      <p class="meta">Last updated: 11 November 2026</p>
+
+      <p>Swipe Cover is a small puzzle game. This page says what we keep about you, why, and how to get rid of it. It is written to be read, not skimmed past.</p>
+
+      <h2>What we store</h2>
+      <ul>
+        <li><strong>If you make an account:</strong> your email address, your username, and either a scrambled (hashed) copy of your password or, if you sign in with Google, Google's identifier for you. We never store your password itself, and we cannot read it.</li>
+        <li><strong>Your results:</strong> your times and the moves behind them for the daily levels and Swipe Rush, and your 1v1 matches with the result and your rating.</li>
+        <li><strong>Login sessions:</strong> a random code that keeps you logged in for up to 30 days. We store only a fingerprint of it.</li>
+      </ul>
+      <p>Playing without an account stores nothing about you on our servers.</p>
+
+      <h2>What stays in your browser</h2>
+      <p>Your settings, your progress today, your login code and any score waiting to be sent are kept in your browser's local storage on your device. We do not use cookies, advertising or analytics trackers.</p>
+
+      <h2>Who can see what</h2>
+      <ul>
+        <li><strong>Everyone:</strong> your username, your times, your Swipe Rush and 1v1 scores, your rating and your win/loss record, on the leaderboards, and your username to an opponent during a match.</li>
+        <li><strong>Nobody but us:</strong> your email address. It is never shown to other players.</li>
+      </ul>
+      <p>Choose a username that does not reveal who you are if you would rather stay private.</p>
+
+      <h2>Other companies involved</h2>
+      <ul>
+        <li><strong>Our hosting provider</strong> runs the game's servers. Like any web host, it handles your IP address when you connect, and may keep it in its logs.</li>
+        <li><strong>Google Fonts</strong> supplies the game's lettering, so your browser contacts Google when the page loads.</li>
+        <li><strong>Google Sign-In</strong>, only if you choose it, tells us your email address and a Google identifier. Google's own privacy policy applies to that sign-in.</li>
+      </ul>
+      <p>We do not sell your information or share it for advertising.</p>
+
+      <h2>How long we keep it</h2>
+      <p>Your account and results are kept until you delete your account. Sessions expire after 30 days.</p>
+
+      <h2>Deleting your data</h2>
+      <p>In the game, open the account button at the top right of the menu and choose <em>Delete account</em>. This removes your account, your logins and your leaderboard times. Past 1v1 matches are kept without your name so your opponent's history stays intact. Server backups may hold older copies for a short while before they are replaced.</p>
+      <p>You can also change your username from the same menu. To ask for a copy of your data, or for anything else, write to <span id="contact">the contact address below once the site owner sets it</span>.</p>
+
+      <h2>Children</h2>
+      <p>Swipe Cover is not aimed at children under 13, and we do not knowingly collect their information. If you think a child has made an account, tell us and we will remove it.</p>
+
+      <h2>Changes</h2>
+      <p>If we change this policy, we will update the date at the top. Material changes will be announced in the game.</p>
+
+      <h2>Contact</h2>
+      <p id="contact-line">Questions about your data: see the contact address for this site.</p>
+    </main>
+    <script>
+      fetch('/api/config').then((r) => r.json()).then((config) => {
+        if (!config.contact_email) return;
+        const link = document.createElement('a');
+        link.href = 'mailto:' + config.contact_email;
+        link.textContent = config.contact_email;
+        document.getElementById('contact').replaceChildren(link.cloneNode(true));
+        document.getElementById('contact-line').replaceChildren('Questions about your data: ', link);
+      }).catch(() => {});
+    </script>
+  </body>
+</html>
