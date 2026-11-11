@@ -58,12 +58,15 @@ import {
   getSession,
   getToken,
   logOut,
+  LEGAL_LINK,
   LoginRequiredError,
+  RESET_TOKEN,
   ScoreRejectedError,
   submitScore,
 } from './api.js';
 import AuthDialog from './AuthDialog.jsx';
 import AccountDialog from './AccountDialog.jsx';
+import LegalDialog from './LegalDialog.jsx';
 import VersusLobby from './VersusLobby.jsx';
 import { VersusClient } from './versusClient.js';
 import './versus.css';
@@ -607,17 +610,18 @@ function VersusResults({ rush, outcome, onAgain, onHome }) {
   const you = outcome?.you ?? rush.you;
   const them = outcome?.them ?? rush.them;
   const verdict = outcome ? { win: 'Victory', lose: 'Defeat', draw: 'Draw' }[outcome.outcome] : 'Final score';
+  const mode = outcome?.mode || rush.mode;
   const stats = [{ label: 'OPPONENT', value: rush.opponent }];
   if (outcome?.ranked && outcome.rating !== null) {
     stats.push({ label: 'RATING', value: `${outcome.rating} (${outcome.delta >= 0 ? '+' : ''}${outcome.delta})` });
   } else if (outcome) {
-    stats.push({ label: 'MATCH', value: 'FRIENDLY' });
+    stats.push({ label: 'MATCH', value: mode === 'quick' ? 'QUICK · UNRATED' : 'FRIENDLY' });
   }
   return (
     <ResultDialog
       tone="rush"
       titleId="versus-result-title"
-      kicker={outcome && !outcome.ranked ? 'SWIPE RUSH · 1V1 · FRIENDLY' : 'SWIPE RUSH · 1V1'}
+      kicker={`SWIPE RUSH · 1V1 · ${{ ranked: 'RANKED', quick: 'QUICK MATCH', friends: 'FRIEND MATCH' }[mode] || ''}`.replace(/ · $/, '')}
       title={verdict}
       hero={{ label: 'YOU · THEM', value: `${you} – ${them}` }}
       stats={stats}
@@ -643,7 +647,9 @@ export default function App() {
     return saved ? { id: saved.user.id, name: saved.user.username } : { id: null, name: null };
   });
   const [accountDialog, setAccountDialog] = useState(null); // 'rename' | 'delete' | null
-  const [showAuth, setShowAuth] = useState(null); // null, or { reason } while the login dialog is open
+  // null, or { reason } while the login dialog is open. A password reset link opens it on the new-password step.
+  const [legal, setLegal] = useState(LEGAL_LINK); // null, 'privacy' or 'terms': the document being read
+  const [showAuth, setShowAuth] = useState(() => (RESET_TOKEN ? { reason: 'Password reset', mode: 'reset', token: RESET_TOKEN } : null));
   const authIntent = useRef(null); // what to do once logged in: 'versus'
   const [lobby, setLobby] = useState(null); // the 1v1 lobby: null, or { status, code?, error? }
   const [versusResult, setVersusResult] = useState(null);
@@ -1252,6 +1258,8 @@ export default function App() {
     commitRush({
       day,
       versus: true,
+      mode: match.mode,
+      totalMs: match.duration_ms,
       matchId: match.match_id,
       seed: match.seed,
       opponent: match.opponent,
@@ -1307,10 +1315,10 @@ export default function App() {
         setLobby((current) => (current?.status === 'connecting' ? { status: 'menu' } : current));
         break;
       case 'searching':
-        setLobby({ status: 'searching' });
+        setLobby({ status: 'searching', mode: message.mode, rating: message.rating, range: message.range });
         break;
       case 'room':
-        setLobby({ status: 'room', code: message.code });
+        setLobby({ status: 'room', code: message.code, seconds: message.seconds });
         break;
       case 'idle':
         setLobby((current) => (current ? { status: 'menu' } : current));
@@ -1813,6 +1821,7 @@ export default function App() {
           onLogout={handleLogout}
           onRename={() => setAccountDialog('rename')}
           onDelete={() => setAccountDialog('delete')}
+          onLegal={setLegal}
           settings={settings}
           onSettingsChange={changeSettings}
           leaving={travel === 'up' || travel === 'dive' || ((travel === 'down' || travel === 'rise') && !menuReveal)}
@@ -1856,7 +1865,8 @@ export default function App() {
               solved={rush.solved}
               endsAt={rush.endsAt}
               ranked={rush.ranked}
-              versus={rush.versus ? { opponent: rush.opponent, you: rush.you, them: rush.them } : null}
+              versus={rush.versus ? { opponent: rush.opponent, you: rush.you, them: rush.them, mode: rush.mode } : null}
+              totalMs={rush.versus ? rush.totalMs : undefined}
             />
 
             <GameBoard
@@ -1933,8 +1943,8 @@ export default function App() {
       {lobby && (
         <VersusLobby
           lobby={lobby}
-          onQueue={() => sendVersus({ type: 'queue' })}
-          onCreate={() => sendVersus({ type: 'create' })}
+          onQueue={(mode) => sendVersus({ type: 'queue', mode })}
+          onCreate={(seconds) => sendVersus({ type: 'create', seconds })}
           onJoin={(code) => sendVersus({ type: 'join', code })}
           onCancel={() => sendVersus({ type: 'cancel' })}
           onClose={closeLobby}
@@ -1959,7 +1969,8 @@ export default function App() {
         />
       )}
 
-      {showAuth && <AuthDialog reason={showAuth.reason} onClose={closeAuth} onSuccess={handleLoggedIn} />}
+      {showAuth && <AuthDialog reason={showAuth.reason} initialMode={showAuth.mode} resetToken={showAuth.token} onClose={closeAuth} onSuccess={handleLoggedIn} onLegal={setLegal} />}
+      {legal && <LegalDialog initial={legal} onClose={() => setLegal(null)} />}
 
       {settingsDialog.mounted && (
         <SettingsDialog settings={settings} onSettingsChange={changeSettings} onClose={closeSettings} closing={settingsDialog.closing} />

@@ -897,53 +897,130 @@
    strips; the #1 row is lit with a cyan edge. */
 
 .menu-board-tabs {
+  position: relative;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 6px;
+  border: 1px solid rgba(174, 198, 204, .26);
+  background: rgba(8, 24, 32, .5);
+}
+
+/* One lit block that slides to the chosen tab. */
+.menu-board-glider {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -1px;
+  width: calc(100% / 3 + 1px);
+  border: 1px solid rgba(78, 243, 208, .65);
+  background: rgba(78, 243, 208, .13);
+  box-shadow: 0 0 16px rgba(78, 243, 208, .22), inset 0 0 14px rgba(78, 243, 208, .08);
+  pointer-events: none;
+  transition: transform .36s cubic-bezier(.3, .8, .25, 1);
 }
 
 .menu-board-tab {
-  height: 38px;
+  position: relative;
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 0;
-  border: 1px solid rgba(174, 198, 204, .24);
-  background: rgba(8, 24, 32, .45);
-  color: rgba(220, 233, 230, .72);
+  border: 0;
+  background: none;
+  color: rgba(220, 233, 230, .66);
   cursor: pointer;
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: .04em;
-  transition: border-color .18s ease, background .18s ease, color .18s ease;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  transition: color .2s ease;
 }
 
 .menu-board-tab:hover,
 .menu-board-tab:focus-visible {
-  border-color: rgba(78, 243, 208, .45);
   color: #e6faf6;
   outline: none;
 }
 
 .menu-board-tab.is-active {
+  color: #4ef3d0;
+}
+
+/* The row under the tabs: level choices for DAILY, a line of context for the others. */
+.menu-board-sub {
+  display: flex;
+  height: 34px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.menu-board-sub p {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: rgba(174, 198, 204, .6);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .2em;
+  animation: board-rise .35s cubic-bezier(.2, .75, .25, 1) both;
+}
+
+.menu-board-sub p span:last-child {
+  color: #4ef3d0;
+}
+
+.menu-board-levels {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.menu-board-levels button {
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(174, 198, 204, .22);
+  background: rgba(8, 24, 32, .4);
+  color: rgba(220, 233, 230, .62);
+  cursor: pointer;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .18em;
+  transition: border-color .18s, background .18s, color .18s;
+}
+
+.menu-board-levels button:hover,
+.menu-board-levels button:focus-visible {
+  border-color: rgba(78, 243, 208, .45);
+  color: #e6faf6;
+  outline: none;
+}
+
+.menu-board-levels button.is-active {
   border-color: rgba(78, 243, 208, .6);
   background: rgba(78, 243, 208, .12);
-  box-shadow: inset 0 0 14px rgba(78, 243, 208, .08);
   color: #4ef3d0;
 }
 
 /* Fixed height for ten rows (scrolls on short screens), so switching levels never moves the panel. */
 .menu-board-list {
-  height: 380px;
-  max-height: calc(100svh - 330px);
+  height: 404px;
+  max-height: calc(100svh - 392px);
   min-height: 180px;
-  margin-top: 14px;
+  margin-top: 8px;
   padding-right: 3px;
   overflow-y: auto;
   scrollbar-color: rgba(78, 243, 208, .35) transparent;
   scrollbar-width: thin;
 }
 
-.menu-board-list ol {
+.menu-board-rows {
   display: grid;
   gap: 3px;
   margin: 0;
@@ -951,10 +1028,153 @@
   list-style: none;
 }
 
+.menu-board-view {
+  display: grid;
+  gap: 8px;
+  animation: board-rise .38s cubic-bezier(.2, .75, .25, 1) both;
+}
+
+@keyframes board-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- The podium ---------- */
+
+.menu-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-podium-slot {
+  position: relative;
+  display: grid;
+  min-height: 92px;
+  align-content: end;
+  justify-items: center;
+  gap: 2px;
+  padding: 24px 6px 10px;
+  background: linear-gradient(180deg, rgba(36, 104, 112, .1), rgba(36, 104, 112, .26));
+  box-shadow: inset 0 2px 0 rgba(174, 198, 204, .4);
+  clip-path: polygon(0 10px, 10px 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  text-align: center;
+  animation: podium-rise .5s cubic-bezier(.2, .75, .25, 1) both;
+  animation-delay: calc(.1s + var(--k, 1) * .07s);
+}
+
+.menu-podium-slot.is-place-1 {
+  min-height: 122px;
+  background: linear-gradient(180deg, rgba(78, 243, 208, .14), rgba(36, 104, 112, .3));
+  box-shadow: inset 0 2px 0 #4ef3d0;
+}
+
+.menu-podium-slot.is-place-2 { min-height: 106px; }
+.menu-podium-slot.is-place-3 { min-height: 92px; }
+
+.menu-podium-slot.is-you {
+  background: linear-gradient(180deg, rgba(78, 243, 208, .2), rgba(36, 104, 112, .34));
+}
+
+.menu-podium-slot.is-empty {
+  background: rgba(36, 104, 112, .08);
+  box-shadow: inset 0 2px 0 rgba(174, 198, 204, .16);
+  opacity: .7;
+}
+
+.menu-podium-crown {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  color: #4ef3d0;
+  filter: drop-shadow(0 0 6px rgba(78, 243, 208, .7));
+  transform: translateX(-50%);
+}
+
+.menu-podium-badge {
+  position: absolute;
+  top: 7px;
+  left: 9px;
+  color: rgba(174, 198, 204, .6);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+
+.menu-podium-slot.is-place-1 .menu-podium-badge { color: #4ef3d0; }
+.menu-podium-slot.is-place-1 .menu-podium-crown + .menu-podium-badge { opacity: 0; }
+
+.menu-podium-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: #f2fbf9;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-podium-name small {
+  margin-left: 5px;
+  color: #4ef3d0;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .14em;
+}
+
+.menu-podium-slot.is-you .menu-podium-name { color: #4ef3d0; }
+
+.menu-podium-slot strong {
+  margin-top: 4px;
+  color: #f2fbf9;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-shadow: 0 0 18px rgba(78, 243, 208, .3);
+}
+
+.menu-podium-slot.is-place-1 strong {
+  color: #4ef3d0;
+  font-size: 21px;
+}
+
+.menu-podium-unit {
+  color: rgba(174, 198, 204, .6);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .24em;
+}
+
+.menu-podium-sub {
+  color: rgba(206, 224, 222, .7);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .04em;
+}
+
+@keyframes podium-rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .menu-board-view,
+  .menu-board-sub p,
+  .menu-podium-slot { animation: none; }
+  .menu-board-glider { transition: none; }
+}
+
 .menu-board-row {
   display: grid;
   min-height: 35px;
-  grid-template-columns: 22px 22px minmax(0, 1fr) auto 64px;
+  grid-template-columns: 22px 22px minmax(0, 1fr) auto minmax(64px, auto);
   align-items: center;
   gap: 9px;
   padding: 0 12px 0 10px;

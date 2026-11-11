@@ -1,3 +1,5 @@
+import pytest
+
 import main
 from accounts import RateLimiter, hash_password, verify_password
 
@@ -86,7 +88,7 @@ def test_rate_limiter_forgets_old_hits():
 
 
 def test_google_sign_in_is_off_until_configured(client):
-    assert client.get("/api/config").json() == {"google_client_id": None, "contact_email": None}
+    assert client.get("/api/config").json() == {"google_client_id": None, "contact_email": None, "password_reset": False}
     assert client.post("/api/auth/google", json={"credential": "x"}).status_code == 404
 
 
@@ -161,3 +163,75 @@ def test_deleting_an_account_removes_everything(client, signup):
     assert client.get("/api/leaderboard/1").json()["entries"] == []
     assert client.post("/api/auth/login", json={"identifier": me["email"], "password": "correct horse battery"}).status_code == 401
     assert register(client, username="Goner Gone", email=me["email"]).status_code == 200  # the name and email are free again
+
+
+# ---- forgotten passwords ----
+
+
+@pytest.fixture
+def mail(monkeypatch):
+    """Turns password reset on and collects the emails it would send."""
+    sent = []
+    monkeypatch.setattr(main, "PUBLIC_URL", "https://game.example")
+    monkeypatch.setattr(main, "mail_enabled", lambda: True)
+    monkeypatch.setattr(main, "send_mail", lambda to, subject, body: sent.append((to, subject, body)) or True)
+    return sent
+
+
+def _token(body: str) -> str:
+    return body.split("?reset=")[1].split()[0]
+
+
+def test_reset_is_off_without_mail_settings(client):
+    assert client.get("/api/config").json()["password_reset"] is False
+    assert client.post("/api/auth/forgot", json={"email": "a@b.com"}).status_code == 503
+
+
+def test_forgot_password_emails_a_working_link(client, signup, mail):
+    player = signup("Reset Me")
+    assert client.get("/api/config").json()["password_reset"] is True
+    assert client.post("/api/auth/forgot", json={"email": player["email"]}).json() == {"ok": True}
+    to, _, body = mail[0]
+    assert to == player["email"] and "https://game.example/?reset=" in body
+
+    done = client.post("/api/auth/reset", json={"token": _token(body), "password": "a brand new password"})
+    assert done.status_code == 200 and done.json()["user"]["username"] == "Reset Me"
+    # The new password works, the old one and the old logins do not.
+    assert client.post("/api/auth/login", json={"identifier": player["email"], "password": "a brand new password"}).status_code == 200
+    assert client.post("/api/auth/login", json={"identifier": player["email"], "password": "correct horse battery"}).status_code == 401
+    assert client.get("/api/auth/me", headers=player["headers"]).status_code == 401
+
+
+def test_a_reset_link_works_once(client, signup, mail):
+    player = signup("Once Only")
+    client.post("/api/auth/forgot", json={"email": player["email"]})
+    token = _token(mail[0][2])
+    assert client.post("/api/auth/reset", json={"token": token, "password": "first new password"}).status_code == 200
+    assert client.post("/api/auth/reset", json={"token": token, "password": "second new password"}).status_code == 400
+
+
+def test_a_newer_link_replaces_the_older_one(client, signup, mail):
+    player = signup("Twice Asked")
+    client.post("/api/auth/forgot", json={"email": player["email"]})
+    client.post("/api/auth/forgot", json={"email": player["email"]})
+    old, new = _token(mail[0][2]), _token(mail[1][2])
+    assert client.post("/api/auth/reset", json={"token": old, "password": "some new password"}).status_code == 400
+    assert client.post("/api/auth/reset", json={"token": new, "password": "some new password"}).status_code == 200
+
+
+def test_unknown_email_looks_the_same_and_sends_nothing(client, mail):
+    assert client.post("/api/auth/forgot", json={"email": "nobody@example.com"}).json() == {"ok": True}
+    assert mail == []
+
+
+def test_reset_rejects_short_passwords_and_junk_tokens(client, signup, mail):
+    player = signup("Picky")
+    client.post("/api/auth/forgot", json={"email": player["email"]})
+    assert client.post("/api/auth/reset", json={"token": _token(mail[0][2]), "password": "short"}).status_code == 422
+    assert client.post("/api/auth/reset", json={"token": "not-a-real-token", "password": "long enough password"}).status_code == 400
+
+
+def test_forgot_is_rate_limited_per_email(client, signup, mail):
+    player = signup("Spammed")
+    codes = [client.post("/api/auth/forgot", json={"email": player["email"]}).status_code for _ in range(4)]
+    assert codes == [200, 200, 200, 429]

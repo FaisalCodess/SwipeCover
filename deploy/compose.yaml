@@ -7,6 +7,13 @@ services:
     environment:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       CONTACT_EMAIL: ${CONTACT_EMAIL:-}
+      # Password reset emails: the link in them points at PUBLIC_URL, and they go out through SMTP.
+      PUBLIC_URL: https://${DOMAIN}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     # Not published to the internet: only Caddy can reach it. That is why it is safe to trust
     # Caddy's X-Forwarded-For header (without it every player would look like one address and
     # share the sign-up and login rate limits). One process only: 1v1 matches live in memory.

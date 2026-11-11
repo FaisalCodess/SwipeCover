@@ -302,3 +302,80 @@
   background: rgba(255, 90, 74, .14);
   color: #ffd0c6;
 }
+
+/* ---------- Password eye and the forgot-password link ---------- */
+
+.auth-password {
+  position: relative;
+  display: flex;
+}
+
+.auth-password .result-input {
+  padding-right: 46px;
+}
+
+.auth-eye {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 42px;
+  height: 100%;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: none;
+  color: rgba(206, 233, 228, .6);
+  cursor: pointer;
+  transition: color .2s;
+}
+
+.auth-eye:hover,
+.auth-eye:focus-visible,
+.auth-eye[aria-pressed='true'] {
+  color: rgb(var(--tone));
+  outline: none;
+}
+
+.auth-forgot {
+  justify-self: end;
+  margin: -6px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgba(174, 198, 204, .7);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .2em;
+}
+
+.auth-forgot:hover,
+.auth-forgot:focus-visible {
+  color: #fff;
+  outline: none;
+  text-decoration: underline;
+}
+
+/* The fine print links are buttons (they open a panel instead of a new tab) that read like links. */
+.auth-legal button,
+.menu-footer-links button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgba(206, 233, 228, .8);
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-legal button:hover,
+.auth-legal button:focus-visible,
+.menu-footer-links button:hover,
+.menu-footer-links button:focus-visible {
+  color: #fff;
+  outline: none;
+}

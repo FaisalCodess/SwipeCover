@@ -11,7 +11,7 @@ from threading import Lock
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Path as PathParam, Request, Response, WebSocket
+from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Path as PathParam, Request, Response, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -40,6 +40,7 @@ from accounts import (
     name_is_blocked,
     verify_password,
 )
+from mailer import mail_enabled, send_mail
 from scores import ScoreStore, clean_name
 from versus import Hub
 
@@ -64,6 +65,8 @@ hub = Hub(users)
 limiter = RateLimiter()
 # Shown on the privacy and terms pages as the address players can write to.
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "").strip()
+# The site's public address (https://yourname.duckdns.org), used for the link in password reset emails.
+PUBLIC_URL = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
 # Set this to enable "Sign in with Google" (an OAuth web client ID from the Google Cloud console).
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 ALLOWED_ORIGINS = [
@@ -166,6 +169,15 @@ class DeletePayload(BaseModel):
     password: str | None = Field(default=None, max_length=PASSWORD_MAX_LENGTH)
 
 
+class ForgotPayload(BaseModel):
+    email: str = Field(max_length=254)
+
+
+class ResetPayload(BaseModel):
+    token: str = Field(max_length=200)
+    password: str = Field(max_length=PASSWORD_MAX_LENGTH)
+
+
 class GooglePayload(BaseModel):
     credential: str = Field(max_length=4096)
     username: str | None = Field(default=None, max_length=64)
@@ -246,7 +258,15 @@ def _check_username(username: str) -> str:
 
 @app.get("/api/config")
 def config() -> dict:
-    return {"google_client_id": GOOGLE_CLIENT_ID or None, "contact_email": CONTACT_EMAIL or None}
+    return {
+        "google_client_id": GOOGLE_CLIENT_ID or None,
+        "contact_email": CONTACT_EMAIL or None,
+        "password_reset": reset_available(),
+    }
+
+
+def reset_available() -> bool:
+    return bool(PUBLIC_URL) and mail_enabled()
 
 
 @app.post("/api/auth/register")
@@ -279,6 +299,52 @@ def login(payload: LoginPayload, request: Request) -> dict:
     valid = verify_password(payload.password, user["password_hash"] if user else hash_password("not-a-real-password"))
     if user is None or not valid:
         raise HTTPException(status_code=401, detail="Wrong email, username or password.")
+    return _session(user)
+
+
+def _send_reset_email(email: str, username: str, token: str) -> None:
+    link = f"{PUBLIC_URL}/?reset={token}"
+    body = "\n".join([
+        f"Hi {username},",
+        "",
+        "Someone asked to reset the password for your Swipe Cover account.",
+        "Open this link to choose a new one (it works once, for one hour):",
+        "",
+        link,
+        "",
+        "If that was not you, ignore this email: your password stays as it is.",
+        "",
+    ])
+    send_mail(email, "Reset your Swipe Cover password", body)
+
+
+@app.post("/api/auth/forgot")
+def forgot_password(payload: ForgotPayload, request: Request, background: BackgroundTasks) -> dict:
+    """Emails a reset link. The answer is the same whether or not the address has an account, so
+    this cannot be used to find out who has one."""
+    if not reset_available():
+        raise HTTPException(status_code=503, detail="Password reset is not available right now.")
+    email = clean_email(payload.email)
+    if email is None:
+        raise HTTPException(status_code=422, detail="That email does not look right.")
+    if not (limiter.allow(f"forgot-ip:{_client_key(request)}", 6, 3600) and limiter.allow(f"forgot-id:{email}", 3, 3600)):
+        raise HTTPException(status_code=429, detail="Too many requests. Try again in a while.")
+    user = users.by_email(email)
+    if user is not None:
+        background.add_task(_send_reset_email, email, user["username"], users.new_reset(user["id"]))
+    return {"ok": True}
+
+
+@app.post("/api/auth/reset")
+def reset_password(payload: ResetPayload, request: Request) -> dict:
+    """Sets a new password from an emailed link and logs the player in."""
+    if not limiter.allow(f"reset:{_client_key(request)}", 10, 600):
+        raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes and try again.")
+    if len(payload.password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(status_code=422, detail=f"Passwords need at least {PASSWORD_MIN_LENGTH} characters.")
+    user = users.use_reset(payload.token, hash_password(payload.password))
+    if user is None:
+        raise HTTPException(status_code=400, detail="That reset link has expired or was already used. Ask for a new one.")
     return _session(user)
 
 

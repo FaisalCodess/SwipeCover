@@ -6,6 +6,8 @@ services:
     environment:
       # Set GOOGLE_CLIENT_ID (in your shell or a .env file next to this file) to turn on "Sign in with Google".
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      # The address the Privacy Policy and Terms tell people to write to.
+      CONTACT_EMAIL: ${CONTACT_EMAIL:-swipecovergame@gmail.com}
     volumes:
       # Keeps accounts, the leaderboards and 1v1 ratings between restarts and rebuilds.
       - scores:/data

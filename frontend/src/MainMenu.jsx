@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUpRight, Check, Gamepad2, LoaderCircle, LockKeyhole, LogIn, LogOut, Pencil, Settings, Swords, Trash2, Trophy, User, X, Zap } from 'lucide-react';
+import { ArrowUpRight, CalendarDays, Check, Crown, Flame, Gamepad2, LoaderCircle, LockKeyhole, LogIn, LogOut, Pencil, Settings, Swords, Trash2, Trophy, User, X, Zap } from 'lucide-react';
 import { fetchLeaderboard, fetchRushLeaderboard, fetchVersusLeaderboard } from './api.js';
 import { getTimeUntilAmmanReset } from './dailyReset.js';
 import { sounds, vibrate } from './audio.js';
@@ -529,68 +529,122 @@ function SettingsContent({ settings, onSettingsChange }) {
   );
 }
 
-function BoardRow({ entry, best }) {
+// The leaderboard has three sections instead of five tabs: DAILY (pick one of the three levels
+// inside it), RUSH, and RANKED (the highest 1v1 ratings).
+const BOARD_SECTIONS = [
+  { id: 'daily', label: 'DAILY', icon: CalendarDays },
+  { id: 'rush', label: 'RUSH', icon: Flame },
+  { id: 'ranked', label: 'RANKED', icon: Crown },
+];
+
+const BOARD_NOTES = {
+  rush: { left: 'SWIPE RUSH · 5 MIN · MOST MAPS', right: 'TODAY' },
+  ranked: { left: 'RANKED 1V1 · ELO RATING', right: 'ALL TIME' },
+};
+
+const EMPTY_BOARD = {
+  daily: (level) => ['NO TIMES YET', `Be the first to finish level ${level} today.`],
+  rush: () => ['NO RUNS YET', 'Be the first to set a Swipe Rush score today.'],
+  ranked: () => ['NO RANKED MATCHES YET', 'Win a ranked 1v1 to take the top spot.'],
+};
+
+// What one entry shows: a headline number, what it measures, and a line of detail.
+function describeEntry(section, entry) {
+  if (section === 'ranked') {
+    return { main: String(entry.rating), unit: 'RATING', sub: `${entry.wins}W ${entry.losses}L${entry.draws ? ` ${entry.draws}D` : ''}` };
+  }
+  if (section === 'rush') {
+    return { main: String(entry.maps), unit: entry.maps === 1 ? 'MAP' : 'MAPS', sub: formatMenuTime(entry.time_ms) };
+  }
+  return { main: formatMenuTime(entry.time_ms), unit: 'TIME', sub: `${entry.moves} moves` };
+}
+
+function BoardRow({ section, entry }) {
+  const { main, unit, sub } = describeEntry(section, entry);
   return (
-    <li className={`menu-board-row ${best ? 'is-best' : ''} ${entry.you ? 'is-you' : ''}`}>
+    <li className={`menu-board-row ${entry.you ? 'is-you' : ''}`}>
       <span className="menu-board-rank">{String(entry.rank).padStart(2, '0')}</span>
       <span className="menu-board-avatar" aria-hidden="true"><User size={13} strokeWidth={1.8} /></span>
       <span className="menu-board-name">
         {entry.name}
         {entry.you && <small className="menu-board-you">YOU</small>}
       </span>
-      <span className="menu-board-moves">
-        {entry.rating !== undefined
-          ? `${entry.wins}W ${entry.losses}L`
-          : entry.maps === undefined ? `${entry.moves} moves` : `${entry.maps} ${entry.maps === 1 ? 'map' : 'maps'}`}
-        {best && <small>BEST</small>}
-      </span>
-      <span className="menu-board-time">{entry.rating !== undefined ? entry.rating : formatMenuTime(entry.time_ms)}</span>
+      <span className="menu-board-moves">{sub}</span>
+      <span className="menu-board-time">{section === 'rush' ? `${main} ${unit.toLowerCase()}` : main}</span>
     </li>
   );
 }
 
-// The tabs: the three daily levels, Swipe Rush, then the 1v1 ratings.
-const BOARD_TABS = [1, 2, 3, 'rush', 'versus'];
+// The top three stand on a podium (second, first, third), the rest follow as rows.
+function Podium({ section, entries }) {
+  return (
+    <ol className="menu-podium" aria-label="Top three">
+      {[2, 1, 3].map((place) => {
+        const entry = entries[place - 1];
+        if (!entry) {
+          return (
+            <li key={place} className={`menu-podium-slot is-place-${place} is-empty`} style={{ '--k': place }}>
+              <span className="menu-podium-badge">{place}</span>
+              <span className="menu-podium-name">OPEN</span>
+            </li>
+          );
+        }
+        const { main, unit, sub } = describeEntry(section, entry);
+        return (
+          <li key={place} className={`menu-podium-slot is-place-${place} ${entry.you ? 'is-you' : ''}`} style={{ '--k': place }}>
+            {place === 1 && <Crown className="menu-podium-crown" size={16} strokeWidth={1.6} aria-hidden="true" />}
+            <span className="menu-podium-badge">{place}</span>
+            <span className="menu-podium-name">{entry.name}{entry.you && <small>YOU</small>}</span>
+            <strong>{main}</strong>
+            <span className="menu-podium-unit">{unit}</span>
+            <small className="menu-podium-sub">{sub}</small>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
-// Today's global top 10 per level, and for Swipe Rush. Without the server it falls back to this device's own first run.
+// Today's global top 10 per level and for Swipe Rush, and the highest 1v1 ratings of all time.
+// Without the server the daily and Rush boards fall back to this device's own first run.
 function LeaderboardContent({ levelScores, player, rush }) {
-  const [activeLevel, setActiveLevel] = useState(() => (
-    [3, 2, 1].find((level) => levelScores?.[level]?.length) || 1
+  const [section, setSection] = useState('daily');
+  const [level, setLevel] = useState(() => (
+    [3, 2, 1].find((number) => levelScores?.[number]?.length) || 1
   ));
   const [boards, setBoards] = useState({});
-  const board = boards[activeLevel];
-  const isRush = activeLevel === 'rush';
-  const isVersus = activeLevel === 'versus';
+  const activeKey = section === 'daily' ? `level-${level}` : section;
+  const board = boards[activeKey];
 
   useEffect(() => {
     const controller = new AbortController();
-    setBoards((previous) => ({ ...previous, [activeLevel]: { ...previous[activeLevel], status: previous[activeLevel]?.entries ? 'ready' : 'loading' } }));
-    const request = activeLevel === 'rush'
+    setBoards((previous) => ({ ...previous, [activeKey]: { ...previous[activeKey], status: previous[activeKey]?.entries ? 'ready' : 'loading' } }));
+    const request = section === 'rush'
       ? fetchRushLeaderboard(controller.signal)
-      : activeLevel === 'versus'
+      : section === 'ranked'
         ? fetchVersusLeaderboard(controller.signal)
-        : fetchLeaderboard(activeLevel, controller.signal);
+        : fetchLeaderboard(level, controller.signal);
     request
-      .then((data) => setBoards((previous) => ({ ...previous, [activeLevel]: { status: 'ready', entries: data.entries, you: data.you } })))
+      .then((data) => setBoards((previous) => ({ ...previous, [activeKey]: { status: 'ready', entries: data.entries, you: data.you } })))
       .catch((error) => {
         if (!controller.signal.aborted) {
           console.info('Global leaderboard unavailable; showing this device.', error.message);
-          setBoards((previous) => ({ ...previous, [activeLevel]: { status: 'offline' } }));
+          setBoards((previous) => ({ ...previous, [activeKey]: { status: 'offline' } }));
         }
       });
     return () => controller.abort();
-  }, [activeLevel, player.id]);
+  }, [activeKey, section, level, player.id]);
 
   let entries = board?.entries || [];
-  if (board?.status === 'offline' && isVersus) {
+  if (board?.status === 'offline' && section === 'ranked') {
     entries = [];
-  } else if (board?.status === 'offline' && isRush) {
+  } else if (board?.status === 'offline' && section === 'rush') {
     const result = rush?.status === 'finished' ? rush.result : null;
     entries = result?.maps > 0
       ? [{ rank: 1, name: player.name || 'You', maps: result.maps, moves: result.moves, time_ms: result.time, you: true }]
       : [];
   } else if (board?.status === 'offline') {
-    entries = (levelScores?.[activeLevel] || [])
+    entries = (levelScores?.[level] || [])
       .filter((entry) => Number.isFinite(entry?.time))
       .sort((left, right) => left.time - right.time)
       .slice(0, 10)
@@ -599,51 +653,82 @@ function LeaderboardContent({ levelScores, player, rush }) {
 
   let footer = player.name ? `PLAYING AS ${player.name.toUpperCase()}` : 'LOG IN TO JOIN';
   if (board?.status === 'offline') footer = 'OFFLINE · SHOWING THIS DEVICE';
+  const [emptyTitle, emptyText] = EMPTY_BOARD[section](level);
+  const sectionIndex = BOARD_SECTIONS.findIndex((entry) => entry.id === section);
 
   return (
     <>
-      <div className="menu-board-tabs menu-panel-item" role="tablist" aria-label="Leaderboard" style={{ '--i': 1 }}>
-        {BOARD_TABS.map((tab) => (
+      <div className={`menu-board-tabs menu-panel-item ${section === 'rush' ? 'is-rush' : ''}`} role="tablist" aria-label="Leaderboard" style={{ '--i': 1 }}>
+        <i className="menu-board-glider" style={{ transform: `translateX(${sectionIndex * 100}%)` }} aria-hidden="true" />
+        {BOARD_SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
             type="button"
-            key={tab}
+            key={id}
             role="tab"
-            aria-selected={activeLevel === tab}
+            aria-selected={section === id}
             aria-controls="menu-board-list"
-            className={`menu-board-tab ${activeLevel === tab ? 'is-active' : ''} ${tab === 'rush' || tab === 'versus' ? 'is-rush' : ''}`}
-            onClick={() => setActiveLevel(tab)}
+            className={`menu-board-tab ${section === id ? 'is-active' : ''}`}
+            onClick={() => setSection(id)}
           >
-            {tab === 'rush' ? 'Rush' : tab === 'versus' ? '1v1' : `Level ${tab}`}
+            <Icon size={14} strokeWidth={1.6} aria-hidden="true" />
+            {label}
           </button>
         ))}
       </div>
 
-      {/* Always sized for ten rows, so switching levels never resizes or moves the panel. */}
+      {/* One row, whatever the section, so the panel never changes height. */}
+      <div className="menu-board-sub menu-panel-item" style={{ '--i': 2 }}>
+        {section === 'daily' ? (
+          <div className="menu-board-levels" role="radiogroup" aria-label="Level">
+            {LEVEL_NUMBERS.map((number) => (
+              <button
+                type="button"
+                key={number}
+                role="radio"
+                aria-checked={level === number}
+                className={level === number ? 'is-active' : ''}
+                onClick={() => setLevel(number)}
+              >
+                LEVEL {number}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p key={section}><span>{BOARD_NOTES[section].left}</span><span>{BOARD_NOTES[section].right}</span></p>
+        )}
+      </div>
+
+      {/* Always sized for ten rows, so switching never resizes or moves the panel. */}
       <div
         id="menu-board-list"
         className="menu-board-list menu-panel-item"
         role="tabpanel"
-        aria-label={isVersus ? '1v1 top players' : isRush ? 'Swipe Rush top runs' : `Level ${activeLevel} top times`}
+        aria-label={section === 'ranked' ? 'Highest ratings' : section === 'rush' ? 'Swipe Rush top runs' : `Level ${level} top times`}
         aria-busy={board?.status === 'loading' || !board}
-        style={{ '--i': 2 }}
+        style={{ '--i': 3 }}
       >
         {entries.length > 0 && (
-          <ol>
-            {entries.map((entry) => <BoardRow key={`${entry.rank}-${entry.name}`} entry={entry} best={entry.rank === 1} />)}
-            {board?.you && (
-              <>
-                <li className="menu-board-gap" aria-hidden="true">···</li>
-                <BoardRow entry={board.you} best={false} />
-              </>
+          <div key={activeKey} className="menu-board-view">
+            <Podium section={section} entries={entries} />
+            {(entries.length > 3 || board?.you) && (
+              <ol className="menu-board-rows">
+                {entries.slice(3).map((entry) => <BoardRow key={`${entry.rank}-${entry.name}`} section={section} entry={entry} />)}
+                {board?.you && (
+                  <>
+                    <li className="menu-board-gap" aria-hidden="true">···</li>
+                    <BoardRow section={section} entry={board.you} />
+                  </>
+                )}
+              </ol>
             )}
-          </ol>
+          </div>
         )}
         {!entries.length && (
           <div className="menu-board-empty">
             {board?.status === 'ready' || board?.status === 'offline' ? (
               <>
-                <span>{isVersus ? 'NO MATCHES YET' : isRush ? 'NO RUNS YET' : 'NO TIMES YET'}</span>
-                <p>{isVersus ? 'Win the first ranked 1v1 to take the top spot.' : isRush ? 'Be the first to set a Swipe Rush score today.' : `Be the first to finish level ${activeLevel} today.`}</p>
+                <span>{emptyTitle}</span>
+                <p>{emptyText}</p>
               </>
             ) : (
               <span className="menu-board-loading"><LoaderCircle className="menu-spin" size={15} /> LOADING</span>
@@ -652,8 +737,8 @@ function LeaderboardContent({ levelScores, player, rush }) {
         )}
       </div>
 
-      <div className="menu-board-footer menu-panel-item" style={{ '--i': 3 }}>
-        <span>{isVersus ? 'ALL TIME · RATING' : 'TODAY · FIRST RUNS'}</span>
+      <div className="menu-board-footer menu-panel-item" style={{ '--i': 4 }}>
+        <span>{section === 'ranked' ? 'ALL TIME · RANKED MATCHES' : 'TODAY · FIRST RUNS'}</span>
         <span className={board?.status === 'offline' ? 'is-offline' : ''}>{footer}</span>
       </div>
     </>
@@ -862,7 +947,7 @@ function AccountChip({ player, onLogin, onLogout, onRename, onDelete }) {
   );
 }
 
-export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, onRename, onDelete, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], rush = { status: 'idle' }, status, error }) {
+export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, onRename, onDelete, onLegal, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], rush = { status: 'idle' }, status, error }) {
   // Which panel is showing ('settings' | 'leaderboard'), and whether it is folding away.
   const [panel, setPanel] = useState(null);
   const [panelClosing, setPanelClosing] = useState(false);
@@ -1182,8 +1267,8 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
         <span>MOVE WITH INTENTION</span>
         <span className="menu-footer-divider" />
         <span className="menu-footer-links">
-          <a href="/privacy.html" target="_blank" rel="noopener">PRIVACY</a>
-          <a href="/terms.html" target="_blank" rel="noopener">TERMS</a>
+          <button type="button" onClick={() => onLegal?.('privacy')}>PRIVACY</button>
+          <button type="button" onClick={() => onLegal?.('terms')}>TERMS</button>
         </span>
       </div>
     </section>

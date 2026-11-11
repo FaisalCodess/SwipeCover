@@ -1,4 +1,8 @@
-"""1v1 Swipe Rush. Two players race on the same boards for five minutes; whoever clears more wins.
+"""1v1 Swipe Rush. Two players race on the same boards; whoever clears more wins.
+
+Three ways to play: a QUICK match (3 minutes, anyone, no rating), a RANKED match (5 minutes, against
+someone with a close rating, moves both ratings) and a FRIEND match (a code to share, a length the
+host picks, no rating).
 
 Everything runs over one WebSocket per player (see `Hub.serve`). The server owns the match: it picks
 the seed, keeps the clock and the score, and checks every cleared board by replaying the route the
@@ -19,7 +23,20 @@ from fastapi import WebSocket, WebSocketDisconnect
 from accounts import UserStore
 from game import DIRECTIONS, MAX_RUSH_MAPS, RUSH_SECONDS, generate_match_map, solves
 
-MATCH_SECONDS = int(os.environ.get("MATCH_SECONDS", RUSH_SECONDS))
+# What each way of finding an opponent means. Friend matches have no entry: the host picks the length.
+MODES = {
+    "quick": {"seconds": 3 * 60, "ranked": False},
+    "ranked": {"seconds": RUSH_SECONDS, "ranked": True},
+}
+FRIEND_LENGTHS = (60, 3 * 60, 5 * 60)
+FRIEND_DEFAULT_SECONDS = 3 * 60
+# Set this to force every match to one length (handy for trying things out).
+MATCH_SECONDS = int(os.environ["MATCH_SECONDS"]) if os.environ.get("MATCH_SECONDS") else None
+# Ranked matchmaking: a player is first matched only with ratings within BASE points of theirs, and
+# the range grows by GROWTH points for every second they wait, so nobody waits forever.
+RANKED_BASE_WINDOW = 100
+RANKED_GROWTH = 15
+MATCHMAKER_INTERVAL = 1.0
 # Time between "opponent found" and the first board, so both players are in the cave and ready.
 COUNTDOWN_SECONDS = float(os.environ.get("MATCH_COUNTDOWN_SECONDS", 6))
 # A cleared board may arrive a little after the clock ran out (network delay).
@@ -32,11 +49,20 @@ CODE_LENGTH = 5
 
 
 @dataclass
+class Waiting:
+    mode: str
+    since: float  # monotonic clock
+    rating: int
+
+
+@dataclass
 class Match:
     id: str
     seed: str
     users: dict[str, dict]  # user id -> user
     ranked: bool
+    mode: str  # "quick", "ranked" or "friends"
+    seconds: int
     starts_at: float
     ends_at: float
     scores: dict[str, int] = field(default_factory=dict)
@@ -52,8 +78,10 @@ class Hub:
     def __init__(self, store: UserStore):
         self.store = store
         self.sockets: dict[str, WebSocket] = {}
-        self.queue: list[str] = []
+        self.queue: dict[str, Waiting] = {}  # user id -> what they are waiting for, oldest first
         self.rooms: dict[str, str] = {}  # invite code -> host's user id
+        self.room_seconds: dict[str, int] = {}  # invite code -> how long that match will last
+        self._ticker: asyncio.Task | None = None
         self.active: dict[str, Match] = {}  # user id -> their running match
         self.users: dict[str, dict] = {}
 
@@ -69,10 +97,10 @@ class Hub:
             pass
 
     def _leave_waiting(self, user_id: str) -> None:
-        if user_id in self.queue:
-            self.queue.remove(user_id)
+        self.queue.pop(user_id, None)
         for code in [code for code, host in self.rooms.items() if host == user_id]:
             del self.rooms[code]
+            self.room_seconds.pop(code, None)
 
     def forget(self, user_id: str) -> None:
         """The account is gone: it leaves the queue and any room it opened."""
@@ -121,9 +149,9 @@ class Hub:
     async def _handle(self, user_id: str, message: dict) -> None:
         kind = message.get("type")
         if kind == "queue":
-            await self._queue(user_id)
+            await self._queue(user_id, str(message.get("mode", "quick")))
         elif kind == "create":
-            await self._create_room(user_id)
+            await self._create_room(user_id, message.get("seconds"))
         elif kind == "join":
             await self._join_room(user_id, str(message.get("code", "")))
         elif kind == "cancel":
@@ -134,25 +162,86 @@ class Hub:
 
     # ---- finding an opponent ----
 
-    async def _queue(self, user_id: str) -> None:
+    async def _queue(self, user_id: str, mode: str) -> None:
+        if mode not in MODES:
+            await self._send(user_id, {"type": "error", "message": "Pick a match type."})
+            return
         if self._busy(user_id):
             await self._send(user_id, {"type": "error", "message": "You are already waiting or in a match."})
             return
-        waiting = next((uid for uid in self.queue if uid != user_id and uid in self.sockets), None)
-        if waiting is None:
-            self.queue.append(user_id)
-            await self._send(user_id, {"type": "searching"})
+        account = self.store.by_id(user_id)
+        if account is None:
             return
-        self.queue.remove(waiting)
-        await self._start(waiting, user_id, ranked=True)
+        self.queue[user_id] = Waiting(mode=mode, since=time.monotonic(), rating=account["rating"])
+        await self._send(user_id, self._searching(user_id, time.monotonic()))
+        await self._pair(mode)
+        if mode == "ranked" and user_id in self.queue and (self._ticker is None or self._ticker.done()):
+            self._ticker = asyncio.create_task(self._matchmaker())
 
-    async def _create_room(self, user_id: str) -> None:
+    @staticmethod
+    def _window(waiting: Waiting, now: float) -> int:
+        """How far apart two ratings may be for this waiting player to accept the match."""
+        return round(RANKED_BASE_WINDOW + RANKED_GROWTH * max(0.0, now - waiting.since))
+
+    def _searching(self, user_id: str, now: float) -> dict:
+        waiting = self.queue[user_id]
+        message = {"type": "searching", "mode": waiting.mode}
+        if waiting.mode == "ranked":
+            message.update(rating=waiting.rating, range=self._window(waiting, now))
+        return message
+
+    async def _pair(self, mode: str) -> None:
+        """Starts every match that can be made right now from the people waiting for `mode`."""
+        while True:
+            waiting = [(uid, entry) for uid, entry in self.queue.items() if entry.mode == mode and uid in self.sockets]
+            if mode == "quick":
+                pair = (waiting[0][0], waiting[1][0]) if len(waiting) >= 2 else None
+            else:
+                pair = self._closest_pair(waiting, time.monotonic())
+            if pair is None:
+                return
+            for uid in pair:
+                del self.queue[uid]
+            await self._start(pair[0], pair[1], mode, self._length(mode))
+
+    def _closest_pair(self, waiting: list[tuple[str, Waiting]], now: float) -> tuple[str, str] | None:
+        """The two ranked players closest in rating, if their rating gap is within what either will accept."""
+        best = None
+        for index, (first, first_entry) in enumerate(waiting):
+            for second, second_entry in waiting[index + 1:]:
+                gap = abs(first_entry.rating - second_entry.rating)
+                allowed = max(self._window(first_entry, now), self._window(second_entry, now))
+                if gap <= allowed and (best is None or gap < best[0]):
+                    best = (gap, first, second)
+        return (best[1], best[2]) if best else None
+
+    async def _matchmaker(self) -> None:
+        """While anyone waits for a ranked match: retry every second as the accepted range grows,
+        and tell them how wide the search has got."""
+        try:
+            while any(entry.mode == "ranked" for entry in self.queue.values()):
+                await asyncio.sleep(MATCHMAKER_INTERVAL)
+                await self._pair("ranked")
+                now = time.monotonic()
+                for uid, entry in list(self.queue.items()):
+                    if entry.mode == "ranked":
+                        await self._send(uid, self._searching(uid, now))
+        finally:
+            self._ticker = None
+
+    @staticmethod
+    def _length(mode: str) -> int:
+        return MATCH_SECONDS if MATCH_SECONDS is not None else MODES[mode]["seconds"]
+
+    async def _create_room(self, user_id: str, seconds) -> None:
         if self._busy(user_id):
             await self._send(user_id, {"type": "error", "message": "You are already waiting or in a match."})
             return
+        seconds = seconds if seconds in FRIEND_LENGTHS else FRIEND_DEFAULT_SECONDS
         code = self._new_code()
         self.rooms[code] = user_id
-        await self._send(user_id, {"type": "room", "code": code})
+        self.room_seconds[code] = seconds
+        await self._send(user_id, {"type": "room", "code": code, "seconds": seconds})
 
     async def _join_room(self, user_id: str, code: str) -> None:
         code = code.strip().upper()
@@ -164,20 +253,23 @@ class Hub:
         elif host is None or host not in self.sockets:
             await self._send(user_id, {"type": "error", "message": "No game with that code. Check it and try again."})
         else:
+            seconds = self.room_seconds.pop(code, FRIEND_DEFAULT_SECONDS)
             del self.rooms[code]
-            await self._start(host, user_id, ranked=False)
+            await self._start(host, user_id, "friends", MATCH_SECONDS if MATCH_SECONDS is not None else seconds)
 
     # ---- the match ----
 
-    async def _start(self, first: str, second: str, ranked: bool) -> None:
+    async def _start(self, first: str, second: str, mode: str, seconds: int) -> None:
         now = time.time()
         match = Match(
             id=str(uuid4()),
             seed=secrets.token_hex(8),
             users={uid: self.users[uid] for uid in (first, second)},
-            ranked=ranked,
+            ranked=bool(MODES.get(mode, {}).get("ranked")),
+            mode=mode,
+            seconds=seconds,
             starts_at=now + COUNTDOWN_SECONDS,
-            ends_at=now + COUNTDOWN_SECONDS + MATCH_SECONDS,
+            ends_at=now + COUNTDOWN_SECONDS + seconds,
             scores={first: 0, second: 0},
         )
         for uid in (first, second):
@@ -194,6 +286,8 @@ class Hub:
             "match_id": match.id,
             "seed": match.seed,
             "ranked": match.ranked,
+            "mode": match.mode,
+            "duration_ms": match.seconds * 1000,
             "opponent": match.users[opponent]["username"],
             "starts_in_ms": max(0, round((match.starts_at - now) * 1000)),
             "remaining_ms": max(0, round((match.ends_at - max(now, match.starts_at)) * 1000)),
@@ -256,6 +350,7 @@ class Hub:
                 "them": match.scores[other],
                 "opponent": match.users[other]["username"],
                 "ranked": match.ranked,
+                "mode": match.mode,
                 "rating": rating,
                 "delta": delta,
             })

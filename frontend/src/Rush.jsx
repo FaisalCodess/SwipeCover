@@ -187,13 +187,13 @@ export function CaveBelow({ heat = 0 }) {
 
 // The countdown, written straight to the page every frame so it never re-renders the board.
 // With no `endsAt` yet (the camera is still falling) it shows the full time.
-export function CountdownText({ endsAt, className = '' }) {
+export function CountdownText({ endsAt, className = '', totalMs = RUSH_MS }) {
   const ref = useRef(null);
   useEffect(() => {
     let frame;
     let shown = '';
     const tick = () => {
-      const text = formatRushClock(endsAt === null ? RUSH_MS : endsAt - Date.now());
+      const text = formatRushClock(endsAt === null ? totalMs : endsAt - Date.now());
       if (text !== shown && ref.current) {
         ref.current.textContent = text;
         shown = text;
@@ -202,23 +202,23 @@ export function CountdownText({ endsAt, className = '' }) {
     };
     tick();
     return () => window.cancelAnimationFrame(frame);
-  }, [endsAt]);
+  }, [endsAt, totalMs]);
   return <span ref={ref} role="timer" className={className} />;
 }
 
 // The bar under the HUD: full at the start, empty at the end.
-function TimeBar({ endsAt }) {
+function TimeBar({ endsAt, totalMs = RUSH_MS }) {
   const ref = useRef(null);
   useEffect(() => {
     let frame;
     const tick = () => {
-      const left = endsAt === null ? 1 : Math.min(1, Math.max(0, (endsAt - Date.now()) / RUSH_MS));
+      const left = endsAt === null ? 1 : Math.min(1, Math.max(0, (endsAt - Date.now()) / totalMs));
       if (ref.current) ref.current.style.transform = `scaleX(${left})`;
       frame = window.requestAnimationFrame(tick);
     };
     tick();
     return () => window.cancelAnimationFrame(frame);
-  }, [endsAt]);
+  }, [endsAt, totalMs]);
   return <div className="rush-bar" aria-hidden="true"><i ref={ref} /></div>;
 }
 
@@ -254,14 +254,14 @@ export function useRushPressure(endsAt, active, onTick) {
 // ---------- The screen's furniture ----------
 
 // `versus` ({ opponent, you, them }) turns it into a 1v1 scoreboard.
-export function RushHud({ solved, endsAt, ranked, versus = null }) {
+export function RushHud({ solved, endsAt, ranked, versus = null, totalMs = RUSH_MS }) {
   return (
     <>
       <div className="game-hud rush-hud">
         <div className="rush-hud-left">
           <span className="game-level-label">
             SWIPE RUSH
-            {versus && <em className="game-practice-tag" title="A 1v1 match: whoever clears more maps wins">1 V 1</em>}
+            {versus && <em className="game-practice-tag" title="A 1v1 match: whoever clears more maps wins">{`1 V 1${{ ranked: ' · RANKED', quick: ' · QUICK', friends: ' · FRIEND' }[versus.mode] || ''}`}</em>}
             {!versus && !ranked && <em className="game-practice-tag" title="Not on the leaderboard: only your first Swipe Rush of the day counts">PRACTICE</em>}
           </span>
           {versus ? (
@@ -281,10 +281,10 @@ export function RushHud({ solved, endsAt, ranked, versus = null }) {
         </div>
         <div className="rush-clock">
           <Timer size={18} strokeWidth={1.5} />
-          <CountdownText endsAt={endsAt} className="rush-countdown tabular-nums" />
+          <CountdownText endsAt={endsAt} totalMs={totalMs} className="rush-countdown tabular-nums" />
         </div>
       </div>
-      <TimeBar endsAt={endsAt} />
+      <TimeBar endsAt={endsAt} totalMs={totalMs} />
     </>
   );
 }

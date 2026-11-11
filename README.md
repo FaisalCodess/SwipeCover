@@ -182,24 +182,31 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
 - Usernames pass a small word filter (`BLOCKED_PARTS` in `backend/accounts.py`) that also catches
   look-alikes such as `sh1t`, and blocks names that look like staff (`admin`...). Add words to
   it as players report names.
-- `frontend/public/privacy.html` and `terms.html` are linked from the menu and the sign-up
-  form. They show the address in `CONTACT_EMAIL`. Have them read over before you launch: they
-  describe what the game actually stores today, so update them if that changes.
-- **Not built yet:** password reset and email verification. Both need an email service (for
-  example Resend, Postmark or any SMTP server) and an account with it. Until then a player who
-  forgets their password cannot recover that account (Google sign-in does not have the problem).
+- The Privacy Policy and Terms of Use open inside the game (from the menu footer and the sign-up
+  form) as a panel, so nothing navigates away. Their text lives in one file,
+  `frontend/src/legalContent.js`; they show the address in `CONTACT_EMAIL`. Have them read over
+  before you launch: they describe what the game actually stores today, so update that file (and
+  its date) if that changes. `/privacy.html` and `/terms.html` still work: they forward to the panel.
+- **Password reset** emails a one-hour, single-use link through any SMTP account (see step 6 of
+  DEPLOY.md). Until `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` and `PUBLIC_URL` are set, the
+  "Forgot password?" link stays hidden. **Not built:** email verification.
 
 ## 1v1 Swipe Rush
 
-- **1 V 1 RUSH** on the menu (login needed). **Find an opponent** pairs you with the next player
-  searching and is *ranked*; **Play a friend** makes a 5-letter code to send, and the friend
-  enters it under "Have a code?". Friendly matches never change ratings.
-- Both players fall into the cave together, get a 3-2-1, and race for five minutes on the **same
-  boards**. Whoever clears more wins; on a tie, whoever cleared their last board sooner; nothing
+- **1 V 1 RUSH** on the menu (login needed) has three ways to play:
+  - **Quick match**: 3 minutes against the next player searching. No rating.
+  - **Ranked**: 5 minutes against a player with a close rating. Moves both Elo ratings.
+    Matchmaking accepts ratings within 100 points at first and widens by 15 points per second
+    waited (`RANKED_BASE_WINDOW`, `RANKED_GROWTH` in `versus.py`), so nobody waits forever.
+    The lobby shows the rating range being searched.
+  - **Friend match**: the host picks 1, 3 or 5 minutes and gets a 5-letter code to send; the
+    friend enters it under "Have a code?". No rating.
+- Both players fall into the cave together, get a 3-2-1, and race on the **same boards**. Whoever clears more wins; on a tie, whoever cleared their last board sooner; nothing
   cleared by either is a draw. Every match uses a fresh random seed, so unlike the daily
   boards every match plays on new maps (same difficulty curve as Swipe Rush, `RUSH_TIERS`).
-- Ranked matches move an Elo rating (start 1000, K=32). The leaderboard's **1v1** tab ranks by
-  rating, and shows wins and losses.
+- Ranked matches move an Elo rating (start 1000, K=32). The leaderboard's **RANKED** section ranks
+  by rating and shows wins and losses. (The leaderboard has three sections: **DAILY** with a
+  level picker inside it, **RUSH** and **RANKED**.)
 - How it is kept honest (`backend/versus.py`): the server picks the seed, keeps the clock and the
   score, and only counts a board when the player sends a route that clears *that* board, in
   order, replayed on the server's own copy (the browser builds boards from the seed so play is
@@ -208,8 +215,8 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
 - The connection is one WebSocket (`/api/versus/ws`). If it drops mid-match the browser
   reconnects and the server puts the player back in the match. Leaving the match counts as losing
   it: the clock does not stop.
-- `MATCH_SECONDS` and `MATCH_COUNTDOWN_SECONDS` change the length and the countdown (the
-  timer on screen assumes five minutes, so only change them for testing).
+- `MATCH_SECONDS` forces every match to one length and `MATCH_COUNTDOWN_SECONDS` changes the
+  countdown. They are for testing: leave them unset and each way to play keeps its own length.
 - Matchmaking and running matches live in memory, so **run one server process** (no
   `--workers`). That is plenty for a small launch; supporting several would mean moving the
   queue and matches into Redis or similar.

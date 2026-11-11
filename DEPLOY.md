@@ -71,9 +71,21 @@ client ID**, type **Web application**, add `https://swipecover.duckdns.org` unde
 JavaScript origins*, then put the client ID in `deploy/.env` as `GOOGLE_CLIENT_ID` and run
 `docker compose up -d`.
 
+## 6. Optional: "Forgot password" emails
+
+The game can email reset links through any SMTP account. With a Gmail account (free, about 500
+emails a day):
+
+1. In that Google account turn on **2-Step Verification**, then create an **App password**
+   (Google account → Security → App passwords). Google shows a 16-letter code once.
+2. In `deploy/.env` set `SMTP_HOST=smtp.gmail.com`, `SMTP_USER=` the Gmail address and
+   `SMTP_PASSWORD=` the 16-letter code (no spaces), then run `docker compose up -d`.
+
+Until these are set, the "Forgot password?" link stays hidden.
+
 ## What this does not cover
 
-- **Password reset and email verification** need an email service; they are not built.
+- **Email verification** (proving a new account's address is real) is not built. Password reset is: see step 6.
 - The free VM is a single small machine: plenty for a few hundred players, not for a viral launch.
 - Running it on your own PC (`docker compose up` in the main folder) is fine for friends on your
   network, but the game is only online while the PC is.

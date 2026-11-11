@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { LoaderCircle, TriangleAlert, X } from 'lucide-react';
 import { BoardFrame } from './MainMenu.jsx';
 import { ResultButton } from './ResultDialog.jsx';
+import PasswordField from './PasswordField.jsx';
 import { changeUsername, cleanName, deleteAccount, getSession } from './api.js';
 import './result.css';
 import './auth.css';
@@ -69,10 +70,7 @@ export default function AccountDialog({ mode, player, onClose, onRenamed, onDele
             <input className="result-input" value={username} onChange={(event) => setUsername(event.target.value)} maxLength={16} autoFocus autoComplete="off" />
           </label>
           {deleting && hasPassword && (
-            <label className="auth-field">
-              <span>PASSWORD</span>
-              <input className="result-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" maxLength={128} />
-            </label>
+            <PasswordField value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
           )}
 
           {error && <p className="result-status is-rejected" role="alert"><TriangleAlert size={14} /> {error.toUpperCase()}</p>}

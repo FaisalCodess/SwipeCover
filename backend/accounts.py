@@ -17,6 +17,7 @@ from threading import Lock
 from uuid import uuid4
 
 SESSION_SECONDS = 30 * 24 * 60 * 60
+RESET_SECONDS = 60 * 60
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 START_RATING = 1000
@@ -136,6 +137,15 @@ class UserStore:
         )
         self._db.execute(
             """
+            CREATE TABLE IF NOT EXISTS password_resets (
+                token_hash TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users (id),
+                expires_at REAL NOT NULL
+            )
+            """
+        )
+        self._db.execute(
+            """
             CREATE TABLE IF NOT EXISTS matches (
                 id TEXT PRIMARY KEY,
                 seed TEXT NOT NULL,
@@ -214,6 +224,7 @@ class UserStore:
         no longer name this player."""
         with self._lock:
             self._db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            self._db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
             self._db.execute("UPDATE matches SET player_a = 'deleted' WHERE player_a = ?", (user_id,))
             self._db.execute("UPDATE matches SET player_b = 'deleted' WHERE player_b = ?", (user_id,))
             self._db.execute("UPDATE matches SET winner = 'deleted' WHERE winner = ?", (user_id,))
@@ -257,6 +268,36 @@ class UserStore:
         with self._lock:
             self._db.execute("DELETE FROM sessions WHERE token_hash = ?", (_hash_token(token),))
             self._db.commit()
+
+    # ---- forgotten passwords ----
+
+    def new_reset(self, user_id: str) -> str:
+        """A one-hour, single-use code for choosing a new password. Asking again replaces the old one."""
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        with self._lock:
+            self._db.execute("DELETE FROM password_resets WHERE expires_at < ? OR user_id = ?", (now, user_id))
+            self._db.execute("INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)", (_hash_token(token), user_id, now + RESET_SECONDS))
+            self._db.commit()
+        return token
+
+    def use_reset(self, token: str, password_hash: str) -> dict | None:
+        """Spends a reset code: sets the new password, logs every device out, and returns the user.
+        None if the code is wrong, used or expired. Being able to read the email proves it is theirs."""
+        if not token or len(token) > 200:
+            return None
+        with self._lock:
+            row = self._db.execute(
+                "SELECT user_id FROM password_resets WHERE token_hash = ? AND expires_at > ?", (_hash_token(token), time.time())
+            ).fetchone()
+            if row is None:
+                return None
+            user_id = row[0]
+            self._db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
+            self._db.execute("UPDATE users SET password_hash = ?, email_verified = 1 WHERE id = ?", (password_hash, user_id))
+            self._db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            self._db.commit()
+        return self.by_id(user_id)
 
     # ---- 1v1 ----
 
