@@ -105,9 +105,9 @@ export async function logInWithGoogle(credential, username) {
 // Asks for a password reset email. The answer is the same whether or not the address has an account.
 export const requestPasswordReset = (email) => accountRequest('/auth/forgot', { email });
 
-// Sets a new password from the emailed link's code, and logs in.
-export async function resetPassword(token, password) {
-  return startSession(await accountRequest('/auth/reset', { token, password }));
+// Sets a new password from the 6-digit code that was emailed, and logs in.
+export async function resetPassword(email, code, password) {
+  return startSession(await accountRequest('/auth/reset', { email, code, password }));
 }
 
 // A /?legal=privacy or /?legal=terms link (the old privacy.html and terms.html pages send people here)
@@ -121,22 +121,6 @@ export const LEGAL_LINK = (() => {
     const rest = params.toString();
     window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash);
     return page === 'terms' ? 'terms' : 'privacy';
-  } catch {
-    return null;
-  }
-})();
-
-// The password reset link opens the game as /?reset=CODE. The code is read once at load and taken out
-// of the address bar straight away so it does not linger in the history or get shared by accident.
-export const RESET_TOKEN = (() => {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('reset');
-    if (!token) return null;
-    params.delete('reset');
-    const rest = params.toString();
-    window.history.replaceState(null, '', window.location.pathname + (rest ? `?${rest}` : '') + window.location.hash);
-    return token;
   } catch {
     return null;
   }

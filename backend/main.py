@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import time
@@ -32,6 +33,7 @@ from game import (
 from accounts import (
     PASSWORD_MAX_LENGTH,
     PASSWORD_MIN_LENGTH,
+    RESET_SECONDS,
     AccountError,
     RateLimiter,
     UserStore,
@@ -65,7 +67,8 @@ hub = Hub(users)
 limiter = RateLimiter()
 # Shown on the privacy and terms pages as the address players can write to.
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "").strip()
-# The site's public address (https://yourname.duckdns.org), used for the link in password reset emails.
+# The site's public address (https://yourname.duckdns.org). Password reset emails no longer link to it
+# (they carry a code), so it is optional.
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "").strip().rstrip("/")
 # Set this to enable "Sign in with Google" (an OAuth web client ID from the Google Cloud console).
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
@@ -174,7 +177,8 @@ class ForgotPayload(BaseModel):
 
 
 class ResetPayload(BaseModel):
-    token: str = Field(max_length=200)
+    email: str = Field(max_length=254)
+    code: str = Field(max_length=16)
     password: str = Field(max_length=PASSWORD_MAX_LENGTH)
 
 
@@ -266,7 +270,7 @@ def config() -> dict:
 
 
 def reset_available() -> bool:
-    return bool(PUBLIC_URL) and mail_enabled()
+    return mail_enabled()
 
 
 @app.post("/api/auth/register")
@@ -302,25 +306,39 @@ def login(payload: LoginPayload, request: Request) -> dict:
     return _session(user)
 
 
-def _send_reset_email(email: str, username: str, token: str) -> None:
-    link = f"{PUBLIC_URL}/?reset={token}"
-    body = "\n".join([
+def _send_reset_email(email: str, username: str, code: str) -> None:
+    minutes = RESET_SECONDS // 60
+    text = "\n".join([
         f"Hi {username},",
         "",
-        "Someone asked to reset the password for your Swipe Cover account.",
-        "Open this link to choose a new one (it works once, for one hour):",
+        "Your Swipe Cover password reset code is:",
         "",
-        link,
+        code,
         "",
-        "If that was not you, ignore this email: your password stays as it is.",
+        f"Type it into the game to choose a new password. It works once, for {minutes} minutes.",
+        "",
+        "If you did not ask for this, ignore this email: your password stays as it is.",
+        "Nobody from Swipe Cover will ever ask you for this code.",
         "",
     ])
-    send_mail(email, "Reset your Swipe Cover password", body)
+    name = html.escape(username)
+    page = f"""<!doctype html>
+<html><body style="margin:0;padding:24px 12px;background:#0f1115;font-family:Arial,Helvetica,sans-serif;">
+  <div style="max-width:440px;margin:0 auto;background:#171a21;border:1px solid #2a2f3a;border-radius:10px;padding:28px 24px;color:#e8eaf0;">
+    <p style="margin:0 0 18px;font-size:13px;letter-spacing:4px;color:#8b93a7;">SWIPE COVER</p>
+    <p style="margin:0 0 8px;font-size:18px;">Hi {name},</p>
+    <p style="margin:0 0 20px;font-size:15px;line-height:1.5;color:#b9bfce;">Use this code to choose a new password. Type it into the game where you asked for the reset.</p>
+    <p style="margin:0 0 20px;padding:16px;text-align:center;font-family:Consolas,Menlo,monospace;font-size:34px;letter-spacing:10px;font-weight:bold;color:#ffffff;background:#0f1115;border:1px solid #2a2f3a;border-radius:8px;">{code}</p>
+    <p style="margin:0 0 6px;font-size:13px;line-height:1.5;color:#8b93a7;">It works once and expires in {minutes} minutes.</p>
+    <p style="margin:0;font-size:13px;line-height:1.5;color:#8b93a7;">Did not ask for this? Ignore this email and your password stays as it is. Nobody from Swipe Cover will ever ask you for this code.</p>
+  </div>
+</body></html>"""
+    send_mail(email, f"{code} is your Swipe Cover code", text, page)
 
 
 @app.post("/api/auth/forgot")
 def forgot_password(payload: ForgotPayload, request: Request, background: BackgroundTasks) -> dict:
-    """Emails a reset link. The answer is the same whether or not the address has an account, so
+    """Emails a 6-digit reset code. The answer is the same whether or not the address has an account, so
     this cannot be used to find out who has one."""
     if not reset_available():
         raise HTTPException(status_code=503, detail="Password reset is not available right now.")
@@ -337,14 +355,20 @@ def forgot_password(payload: ForgotPayload, request: Request, background: Backgr
 
 @app.post("/api/auth/reset")
 def reset_password(payload: ResetPayload, request: Request) -> dict:
-    """Sets a new password from an emailed link and logs the player in."""
-    if not limiter.allow(f"reset:{_client_key(request)}", 10, 600):
+    """Sets a new password from the emailed 6-digit code and logs the player in."""
+    email = clean_email(payload.email)
+    # A 6-digit code has a million possibilities, so guesses are capped per address (and per
+    # connection): with a 15 minute code, an attacker gets a handful of tries, not thousands.
+    if email is None or not (
+        limiter.allow(f"reset-ip:{_client_key(request)}", 10, 900)
+        and limiter.allow(f"reset-id:{email}", 5, 900)
+    ):
         raise HTTPException(status_code=429, detail="Too many attempts. Wait a few minutes and try again.")
     if len(payload.password) < PASSWORD_MIN_LENGTH:
         raise HTTPException(status_code=422, detail=f"Passwords need at least {PASSWORD_MIN_LENGTH} characters.")
-    user = users.use_reset(payload.token, hash_password(payload.password))
+    user = users.use_reset(email, payload.code, hash_password(payload.password))
     if user is None:
-        raise HTTPException(status_code=400, detail="That reset link has expired or was already used. Ask for a new one.")
+        raise HTTPException(status_code=400, detail="That code is wrong or has expired. Check it, or ask for a new one.")
     return _session(user)
 
 

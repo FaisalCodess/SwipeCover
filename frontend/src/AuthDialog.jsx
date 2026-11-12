@@ -49,12 +49,14 @@ function GoogleButton({ clientId, onCredential }) {
 
 // Log in, sign up, or finish a first Google sign-in by choosing a username.
 // `reason` says why it opened ("Log in to post your time"); `onSuccess(user)` runs once logged in.
-// It can also open straight on the new-password step (`initialMode="reset"`) from an emailed link.
-export default function AuthDialog({ reason, onClose, onSuccess, onLegal, initialMode = 'login', resetToken = null }) {
-  const [mode, setMode] = useState(initialMode); // 'login' | 'register' | 'username' | 'forgot' | 'reset'
+// Forgot password: ask for the email, then (same dialog, same tab) type the 6-digit code from it
+// together with a new password.
+export default function AuthDialog({ reason, onClose, onSuccess, onLegal }) {
+  const [mode, setMode] = useState('login'); // 'login' | 'register' | 'username' | 'forgot' | 'reset'
+  const [code, setCode] = useState('');
+  const [resent, setResent] = useState(false);
   const [googleClientId, setGoogleClientId] = useState(null);
   const [canReset, setCanReset] = useState(false);
-  const [sent, setSent] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -107,13 +109,14 @@ export default function AuthDialog({ reason, onClose, onSuccess, onLegal, initia
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email.trim())) return setError('That email does not look right.');
       return run(async () => {
         await requestPasswordReset(email.trim());
-        setSent(true);
+        setMode('reset');
         return null;
       });
     }
     if (mode === 'reset') {
+      if (!/^\d{6}$/.test(code)) return setError('Enter the 6-digit code from the email.');
       if (password.length < PASSWORD_MIN_LENGTH) return setError(`Passwords need at least ${PASSWORD_MIN_LENGTH} characters.`);
-      return run(() => resetPassword(resetToken, password));
+      return run(() => resetPassword(email.trim(), code, password));
     }
     if (mode === 'login') {
       if (!identifier.trim() || !password) return setError('Enter your email or username and your password.');
@@ -130,7 +133,23 @@ export default function AuthDialog({ reason, onClose, onSuccess, onLegal, initia
   function switchMode(next) {
     setMode(next);
     setError('');
-    setSent(false);
+    setResent(false);
+    setCode('');
+  }
+
+  // "Send it again": a new code replaces the old one.
+  async function sendAgain() {
+    if (busy) return;
+    setError('');
+    setBusy(true);
+    try {
+      await requestPasswordReset(email.trim());
+      setResent(true);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const titles = { login: 'Log in', register: 'Create account', username: 'Pick a username', forgot: 'Forgot password', reset: 'New password' };
@@ -160,14 +179,30 @@ export default function AuthDialog({ reason, onClose, onSuccess, onLegal, initia
               <input className="result-input" value={identifier} onChange={(event) => setIdentifier(event.target.value)} autoComplete="username" autoFocus maxLength={254} />
             </label>
           )}
-          {mode === 'forgot' && !sent && (
-            <p className="auth-note">Enter the email you signed up with and we will send you a link to choose a new password.</p>
+          {mode === 'forgot' && (
+            <p className="auth-note">Enter the email you signed up with and we will send you a 6-digit code.</p>
           )}
-          {mode === 'forgot' && sent && (
-            <p className="auth-note">If that email has an account, a reset link is on its way. It can take a minute, so check your spam folder too. The link works once, for one hour.</p>
+          {mode === 'reset' && (
+            <p className="auth-note">
+              If {email.trim()} has an account, a 6-digit code is on its way. It can take a minute, so check your spam folder too. The code works once, for 15 minutes. Type it here with a new password and you will be logged in.
+            </p>
           )}
-          {mode === 'reset' && <p className="auth-note">Choose a new password for your account. You will be logged in right after.</p>}
-          {(mode === 'register' || (mode === 'forgot' && !sent)) && (
+          {mode === 'reset' && (
+            <label className="auth-field">
+              <span>6-DIGIT CODE</span>
+              <input
+                className="result-input"
+                value={code}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                autoFocus
+                maxLength={6}
+                placeholder="123456"
+              />
+            </label>
+          )}
+          {(mode === 'register' || mode === 'forgot') && (
             <label className="auth-field">
               <span>EMAIL</span>
               <input className="result-input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" autoFocus maxLength={254} />
@@ -185,7 +220,6 @@ export default function AuthDialog({ reason, onClose, onSuccess, onLegal, initia
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-              autoFocus={mode === 'reset'}
               placeholder={mode !== 'login' ? `AT LEAST ${PASSWORD_MIN_LENGTH} CHARACTERS` : ''}
             />
           )}
@@ -197,13 +231,16 @@ export default function AuthDialog({ reason, onClose, onSuccess, onLegal, initia
             <p className="result-status is-rejected" role="alert"><TriangleAlert size={14} /> {error.toUpperCase()}</p>
           )}
 
-          {!(mode === 'forgot' && sent) && (
-            <div className="auth-submit">
-              <ResultButton type="submit" primary>
-                {busy ? <LoaderCircle size={14} className="menu-spin" /> : null}
-                {{ login: 'LOG IN', register: 'CREATE ACCOUNT', forgot: 'SEND RESET LINK', reset: 'SAVE NEW PASSWORD' }[mode] || 'CONTINUE'}
-              </ResultButton>
-            </div>
+          <div className="auth-submit">
+            <ResultButton type="submit" primary>
+              {busy ? <LoaderCircle size={14} className="menu-spin" /> : null}
+              {{ login: 'LOG IN', register: 'CREATE ACCOUNT', forgot: 'SEND ME A CODE', reset: 'SAVE NEW PASSWORD' }[mode] || 'CONTINUE'}
+            </ResultButton>
+          </div>
+          {mode === 'reset' && (
+            <p className="auth-switch">
+              {resent ? 'A NEW CODE WAS SENT. THE OLD ONE NO LONGER WORKS.' : <>NO EMAIL? <button type="button" onClick={sendAgain}>SEND IT AGAIN</button></>}
+            </p>
           )}
 
           {googleClientId && (mode === 'login' || mode === 'register') && (

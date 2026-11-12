@@ -35,13 +35,13 @@ export const LEGAL = {
         title: 'What we keep when you have an account',
         blocks: [
           [
-            'Your email address — used to log you in, to recognise you if you come back with Google, and (when switched on) to send a password reset link. It is never shown to other players.',
+            'Your email address — used to log you in, to recognise you if you come back with Google, and (when switched on) to send a password reset code. It is never shown to other players.',
             'Your username — the name on leaderboards and shown to opponents. You choose it, and you can change it at any time.',
             'Your password, scrambled — we store a one-way scrypt hash, never the password itself. We cannot read it, and neither can anyone who gets a copy of the database.',
             'Google sign-in details — if you choose Google, the email address Google confirms and an identifier Google gives us for you. No password is involved.',
             'Your results — your times and moves for the daily levels, your Swipe Rush runs, and your 1v1 matches with their scores, results and your rating.',
             'Login sessions — a random code that keeps you logged in on this device for up to 30 days. We store only a fingerprint (a SHA-256 hash) of it, so a copy of the database cannot be used to log in as you.',
-            'Reset codes — if you ask for a password reset, a fingerprint of the one-time code, kept until it is used or expires after one hour.',
+            'Reset codes — if you ask for a password reset, a fingerprint of the one-time code, kept until it is used or expires after 15 minutes.',
           ],
         ],
       },
@@ -113,7 +113,7 @@ export const LEGAL = {
         id: 'keep',
         title: 'How long we keep it',
         blocks: [
-          'Your account and results stay until you delete your account. Login sessions expire after 30 days and reset codes after one hour. When you delete your account the data is erased from the live database straight away. Backup copies of the database may hold older versions for a short while before they are replaced.',
+          'Your account and results stay until you delete your account. Login sessions expire after 30 days and reset codes after 15 minutes. When you delete your account the data is erased from the live database straight away. Backup copies of the database may hold older versions for a short while before they are replaced.',
         ],
       },
       {

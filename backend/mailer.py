@@ -8,6 +8,7 @@ import os
 import smtplib
 import ssl
 from email.message import EmailMessage
+from email.utils import formataddr
 
 log = logging.getLogger("swipecover.mail")
 
@@ -20,17 +21,21 @@ def mail_enabled() -> bool:
     return bool(_setting("SMTP_HOST") and _setting("SMTP_USER") and _setting("SMTP_PASSWORD"))
 
 
-def send_mail(to: str, subject: str, body: str) -> bool:
-    """Returns whether it went out. Never raises, so a mail problem cannot break a request."""
+def send_mail(to: str, subject: str, body: str, html: str | None = None) -> bool:
+    """Returns whether it went out. Never raises, so a mail problem cannot break a request.
+    `body` is the plain-text version; `html`, when given, is the styled one mail apps show."""
     if not mail_enabled():
         return False
     host, user = _setting("SMTP_HOST"), _setting("SMTP_USER")
     port = int(_setting("SMTP_PORT", "587") or 587)
     message = EmailMessage()
-    message["From"] = _setting("SMTP_FROM") or user
+    # Shown as "Swipe Cover" in the inbox instead of the bare address, unless SMTP_FROM sets another name.
+    message["From"] = _setting("SMTP_FROM") or formataddr(("Swipe Cover", user))
     message["To"] = to
     message["Subject"] = subject
     message.set_content(body)
+    if html:
+        message.add_alternative(html, subtype="html")
     try:
         context = ssl.create_default_context()
         if port == 465:

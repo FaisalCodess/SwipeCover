@@ -73,7 +73,7 @@ JavaScript origins*, then put the client ID in `deploy/.env` as `GOOGLE_CLIENT_I
 
 ## 6. Optional: "Forgot password" emails
 
-The game can email reset links through any SMTP account. With a Gmail account (free, about 500
+The game can email password reset codes through any SMTP account. With a Gmail account (free, about 500
 emails a day):
 
 1. In that Google account turn on **2-Step Verification**, then create an **App password**

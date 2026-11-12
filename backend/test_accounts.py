@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 import main
@@ -172,14 +174,18 @@ def test_deleting_an_account_removes_everything(client, signup):
 def mail(monkeypatch):
     """Turns password reset on and collects the emails it would send."""
     sent = []
-    monkeypatch.setattr(main, "PUBLIC_URL", "https://game.example")
     monkeypatch.setattr(main, "mail_enabled", lambda: True)
-    monkeypatch.setattr(main, "send_mail", lambda to, subject, body: sent.append((to, subject, body)) or True)
+    monkeypatch.setattr(main, "send_mail", lambda to, subject, body, html=None: sent.append((to, subject, body, html)) or True)
     return sent
 
 
-def _token(body: str) -> str:
-    return body.split("?reset=")[1].split()[0]
+def _code(body: str) -> str:
+    """The 6-digit code in a plain-text reset email."""
+    return re.search(r"^\d{6}$", body, re.MULTILINE).group(0)
+
+
+def _reset(client, player, code, password="a brand new password"):
+    return client.post("/api/auth/reset", json={"email": player["email"], "code": code, "password": password})
 
 
 def test_reset_is_off_without_mail_settings(client):
@@ -187,14 +193,15 @@ def test_reset_is_off_without_mail_settings(client):
     assert client.post("/api/auth/forgot", json={"email": "a@b.com"}).status_code == 503
 
 
-def test_forgot_password_emails_a_working_link(client, signup, mail):
+def test_forgot_password_emails_a_working_code(client, signup, mail):
     player = signup("Reset Me")
     assert client.get("/api/config").json()["password_reset"] is True
     assert client.post("/api/auth/forgot", json={"email": player["email"]}).json() == {"ok": True}
-    to, _, body = mail[0]
-    assert to == player["email"] and "https://game.example/?reset=" in body
+    to, subject, body, html = mail[0]
+    code = _code(body)
+    assert to == player["email"] and code in subject and "http" not in body and code in html
 
-    done = client.post("/api/auth/reset", json={"token": _token(body), "password": "a brand new password"})
+    done = _reset(client, player, code)
     assert done.status_code == 200 and done.json()["user"]["username"] == "Reset Me"
     # The new password works, the old one and the old logins do not.
     assert client.post("/api/auth/login", json={"identifier": player["email"], "password": "a brand new password"}).status_code == 200
@@ -202,21 +209,38 @@ def test_forgot_password_emails_a_working_link(client, signup, mail):
     assert client.get("/api/auth/me", headers=player["headers"]).status_code == 401
 
 
-def test_a_reset_link_works_once(client, signup, mail):
+def test_a_reset_code_works_once(client, signup, mail):
     player = signup("Once Only")
     client.post("/api/auth/forgot", json={"email": player["email"]})
-    token = _token(mail[0][2])
-    assert client.post("/api/auth/reset", json={"token": token, "password": "first new password"}).status_code == 200
-    assert client.post("/api/auth/reset", json={"token": token, "password": "second new password"}).status_code == 400
+    code = _code(mail[0][2])
+    assert _reset(client, player, code, "first new password").status_code == 200
+    assert _reset(client, player, code, "second new password").status_code == 400
 
 
-def test_a_newer_link_replaces_the_older_one(client, signup, mail):
+def test_a_newer_code_replaces_the_older_one(client, signup, mail):
     player = signup("Twice Asked")
     client.post("/api/auth/forgot", json={"email": player["email"]})
     client.post("/api/auth/forgot", json={"email": player["email"]})
-    old, new = _token(mail[0][2]), _token(mail[1][2])
-    assert client.post("/api/auth/reset", json={"token": old, "password": "some new password"}).status_code == 400
-    assert client.post("/api/auth/reset", json={"token": new, "password": "some new password"}).status_code == 200
+    old, new = _code(mail[0][2]), _code(mail[1][2])
+    if old != new:  # one time in a million they match
+        assert _reset(client, player, old, "some new password").status_code == 400
+    assert _reset(client, player, new, "some new password").status_code == 200
+
+
+def test_a_code_only_works_for_its_own_account(client, signup, mail):
+    first, second = signup("First Owner"), signup("Second Owner")
+    client.post("/api/auth/forgot", json={"email": first["email"]})
+    assert _reset(client, second, _code(mail[0][2])).status_code == 400
+
+
+def test_guessing_codes_is_capped(client, signup, mail):
+    player = signup("Guessed At")
+    client.post("/api/auth/forgot", json={"email": player["email"]})
+    real = _code(mail[0][2])
+    wrong = "000000" if real != "000000" else "111111"
+    statuses = [_reset(client, player, wrong).status_code for _ in range(6)]
+    assert statuses == [400] * 5 + [429]
+    assert _reset(client, player, real).status_code == 429  # even the right code waits out the lockout
 
 
 def test_unknown_email_looks_the_same_and_sends_nothing(client, mail):
@@ -224,11 +248,11 @@ def test_unknown_email_looks_the_same_and_sends_nothing(client, mail):
     assert mail == []
 
 
-def test_reset_rejects_short_passwords_and_junk_tokens(client, signup, mail):
+def test_reset_rejects_short_passwords_and_junk_codes(client, signup, mail):
     player = signup("Picky")
     client.post("/api/auth/forgot", json={"email": player["email"]})
-    assert client.post("/api/auth/reset", json={"token": _token(mail[0][2]), "password": "short"}).status_code == 422
-    assert client.post("/api/auth/reset", json={"token": "not-a-real-token", "password": "long enough password"}).status_code == 400
+    assert _reset(client, player, _code(mail[0][2]), "short").status_code == 422
+    assert _reset(client, player, "not-a-code", "long enough password").status_code == 400
 
 
 def test_forgot_is_rate_limited_per_email(client, signup, mail):

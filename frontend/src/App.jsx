@@ -60,7 +60,6 @@ import {
   logOut,
   LEGAL_LINK,
   LoginRequiredError,
-  RESET_TOKEN,
   ScoreRejectedError,
   submitScore,
 } from './api.js';
@@ -647,9 +646,9 @@ export default function App() {
     return saved ? { id: saved.user.id, name: saved.user.username } : { id: null, name: null };
   });
   const [accountDialog, setAccountDialog] = useState(null); // 'rename' | 'delete' | null
-  // null, or { reason } while the login dialog is open. A password reset link opens it on the new-password step.
   const [legal, setLegal] = useState(LEGAL_LINK); // null, 'privacy' or 'terms': the document being read
-  const [showAuth, setShowAuth] = useState(() => (RESET_TOKEN ? { reason: 'Password reset', mode: 'reset', token: RESET_TOKEN } : null));
+  // null, or { reason } while the login dialog is open.
+  const [showAuth, setShowAuth] = useState(null);
   const authIntent = useRef(null); // what to do once logged in: 'versus'
   const [lobby, setLobby] = useState(null); // the 1v1 lobby: null, or { status, code?, error? }
   const [versusResult, setVersusResult] = useState(null);
@@ -1969,7 +1968,7 @@ export default function App() {
         />
       )}
 
-      {showAuth && <AuthDialog reason={showAuth.reason} initialMode={showAuth.mode} resetToken={showAuth.token} onClose={closeAuth} onSuccess={handleLoggedIn} onLegal={setLegal} />}
+      {showAuth && <AuthDialog reason={showAuth.reason} onClose={closeAuth} onSuccess={handleLoggedIn} onLegal={setLegal} />}
       {legal && <LegalDialog initial={legal} onClose={() => setLegal(null)} />}
 
       {settingsDialog.mounted && (

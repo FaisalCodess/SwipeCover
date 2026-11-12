@@ -187,8 +187,8 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
   `frontend/src/legalContent.js`; they show the address in `CONTACT_EMAIL`. Have them read over
   before you launch: they describe what the game actually stores today, so update that file (and
   its date) if that changes. `/privacy.html` and `/terms.html` still work: they forward to the panel.
-- **Password reset** emails a one-hour, single-use link through any SMTP account (see step 6 of
-  DEPLOY.md). Until `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` and `PUBLIC_URL` are set, the
+- **Password reset** emails a 6-digit, single-use code (valid 15 minutes, typed into the game) through any SMTP account (see step 6 of
+  DEPLOY.md). Until `SMTP_HOST`, `SMTP_USER` and `SMTP_PASSWORD` are set, the
   "Forgot password?" link stays hidden. **Not built:** email verification.
 
 ## 1v1 Swipe Rush
