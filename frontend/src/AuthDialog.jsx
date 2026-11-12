@@ -13,7 +13,8 @@ let googleScript = null;
 function loadGoogle() {
   googleScript ||= new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
+    // hl=en: the whole game is in English, so the button says "Continue with Google" whatever the browser's language.
+    script.src = 'https://accounts.google.com/gsi/client?hl=en';
     script.async = true;
     script.onload = () => resolve(window.google);
     script.onerror = () => {
@@ -36,7 +37,10 @@ function GoogleButton({ clientId, onCredential }) {
       .then((google) => {
         if (cancelled || !holder.current) return;
         google.accounts.id.initialize({ client_id: clientId, callback: (response) => latest.current(response.credential) });
-        google.accounts.id.renderButton(holder.current, { theme: 'filled_black', size: 'large', shape: 'rectangular', text: 'continue_with', width: 300 });
+        // Google draws this button itself (in an iframe we cannot style), so match what we can: the width of
+        // the dialog's own buttons, the game's language (see loadGoogle), and (in auth.css) its cut corners.
+        const width = Math.min(400, Math.max(200, Math.round(holder.current.clientWidth) || 320));
+        google.accounts.id.renderButton(holder.current, { theme: 'filled_black', size: 'large', shape: 'rectangular', text: 'continue_with', width });
       })
       .catch(() => {});
     return () => {
