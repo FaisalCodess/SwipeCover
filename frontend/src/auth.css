@@ -86,11 +86,14 @@
   content: '';
 }
 
-/* Same height and cut corners as the game's buttons. The fill is Google's own button colour, so the
-   2px above and below its 40px button blend in. */
+/* Cut corners like the game's buttons. The frame is exactly the height of Google's 40px button and
+   clips anything outside it: a signed-in Google user gets a white outline drawn just outside the
+   button, which showed as white strips above and below it. */
 .auth-google {
   display: flex;
-  height: 44px;
+  height: 40px;
+  margin: 2px 0;
+  overflow: hidden;
   align-items: center;
   justify-content: center;
   background: #131314;
