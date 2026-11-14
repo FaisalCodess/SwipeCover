@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowUpRight, CalendarDays, Check, Crown, Flame, Gamepad2, LoaderCircle, LockKeyhole, LogIn, LogOut, Pencil, Settings, Swords, Trash2, Trophy, User, X, Zap } from 'lucide-react';
-import { fetchLeaderboard, fetchRushLeaderboard, fetchVersusLeaderboard } from './api.js';
+import { fetchLeaderboard, fetchRushLeaderboard, fetchStreakLeaderboard } from './api.js';
 import { getTimeUntilAmmanReset } from './dailyReset.js';
 import { sounds, vibrate } from './audio.js';
 import { KEY_BINDINGS } from './controls.js';
@@ -591,28 +591,28 @@ function SettingsContent({ settings, onSettingsChange }) {
 }
 
 // The leaderboard has three sections instead of five tabs: DAILY (pick one of the three levels
-// inside it), RUSH, and RANKED (the highest 1v1 ratings).
+// inside it), RUSH, and STREAK (the longest running day streaks, up to 100 players).
 const BOARD_SECTIONS = [
   { id: 'daily', label: 'DAILY', icon: CalendarDays },
-  { id: 'rush', label: 'RUSH', icon: Flame },
-  { id: 'ranked', label: 'RANKED', icon: Crown },
+  { id: 'rush', label: 'RUSH', icon: Zap },
+  { id: 'streak', label: 'STREAK', icon: Flame },
 ];
 
 const BOARD_NOTES = {
   rush: { left: 'SWIPE RUSH · 5 MIN · MOST MAPS', right: 'TODAY' },
-  ranked: { left: 'RANKED 1V1 · ELO RATING', right: 'ALL TIME' },
+  streak: { left: 'DAYS IN A ROW · TOP 100', right: 'LIVE' },
 };
 
 const EMPTY_BOARD = {
   daily: (level) => ['NO TIMES YET', `Be the first to finish level ${level} today.`],
   rush: () => ['NO RUNS YET', 'Be the first to set a Swipe Rush score today.'],
-  ranked: () => ['NO RANKED MATCHES YET', 'Win a ranked 1v1 to take the top spot.'],
+  streak: () => ['NO STREAKS YET', 'Finish a daily level or Swipe Rush, and come back tomorrow.'],
 };
 
 // What one entry shows: a headline number, what it measures, and a line of detail.
 function describeEntry(section, entry) {
-  if (section === 'ranked') {
-    return { main: String(entry.rating), unit: 'RATING', sub: `${entry.wins}W ${entry.losses}L${entry.draws ? ` ${entry.draws}D` : ''}` };
+  if (section === 'streak') {
+    return { main: String(entry.streak), unit: entry.streak === 1 ? 'DAY' : 'DAYS', sub: `${entry.days} ${entry.days === 1 ? 'DAY' : 'DAYS'} PLAYED` };
   }
   if (section === 'rush') {
     return { main: String(entry.maps), unit: entry.maps === 1 ? 'MAP' : 'MAPS', sub: formatMenuTime(entry.time_ms) };
@@ -666,10 +666,10 @@ function Podium({ section, entries }) {
   );
 }
 
-// Today's global top 10 per level and for Swipe Rush, and the highest 1v1 ratings of all time.
+// Today's global top 10 per level and for Swipe Rush, and the longest running day streaks.
 // Without the server the daily and Rush boards fall back to this device's own first run.
-function LeaderboardContent({ levelScores, player, rush }) {
-  const [section, setSection] = useState('daily');
+function LeaderboardContent({ levelScores, player, rush, start = 'daily' }) {
+  const [section, setSection] = useState(start);
   const [level, setLevel] = useState(() => (
     [3, 2, 1].find((number) => levelScores?.[number]?.length) || 1
   ));
@@ -682,8 +682,8 @@ function LeaderboardContent({ levelScores, player, rush }) {
     setBoards((previous) => ({ ...previous, [activeKey]: { ...previous[activeKey], status: previous[activeKey]?.entries ? 'ready' : 'loading' } }));
     const request = section === 'rush'
       ? fetchRushLeaderboard(controller.signal)
-      : section === 'ranked'
-        ? fetchVersusLeaderboard(controller.signal)
+      : section === 'streak'
+        ? fetchStreakLeaderboard(controller.signal)
         : fetchLeaderboard(level, controller.signal);
     request
       .then((data) => setBoards((previous) => ({ ...previous, [activeKey]: { status: 'ready', entries: data.entries, you: data.you } })))
@@ -697,7 +697,7 @@ function LeaderboardContent({ levelScores, player, rush }) {
   }, [activeKey, section, level, player.id]);
 
   let entries = board?.entries || [];
-  if (board?.status === 'offline' && section === 'ranked') {
+  if (board?.status === 'offline' && section === 'streak') {
     entries = [];
   } else if (board?.status === 'offline' && section === 'rush') {
     const result = rush?.status === 'finished' ? rush.result : null;
@@ -764,7 +764,7 @@ function LeaderboardContent({ levelScores, player, rush }) {
         id="menu-board-list"
         className="menu-board-list menu-panel-item"
         role="tabpanel"
-        aria-label={section === 'ranked' ? 'Highest ratings' : section === 'rush' ? 'Swipe Rush top runs' : `Level ${level} top times`}
+        aria-label={section === 'streak' ? 'Longest streaks' : section === 'rush' ? 'Swipe Rush top runs' : `Level ${level} top times`}
         aria-busy={board?.status === 'loading' || !board}
         style={{ '--i': 3 }}
       >
@@ -799,7 +799,7 @@ function LeaderboardContent({ levelScores, player, rush }) {
       </div>
 
       <div className="menu-board-footer menu-panel-item" style={{ '--i': 4 }}>
-        <span>{section === 'ranked' ? 'ALL TIME · RANKED MATCHES' : 'TODAY · FIRST RUNS'}</span>
+        <span>{section === 'streak' ? 'RUNNING STREAKS · TOP 100' : 'TODAY · FIRST RUNS'}</span>
         <span className={board?.status === 'offline' ? 'is-offline' : ''}>{footer}</span>
       </div>
     </>
@@ -1015,6 +1015,8 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
   // Which panel is showing ('settings' | 'leaderboard'), and whether it is folding away.
   const [panel, setPanel] = useState(null);
   const [panelClosing, setPanelClosing] = useState(false);
+  // Which leaderboard tab opens first: the streak chip on the menu opens it on STREAK.
+  const [boardStart, setBoardStart] = useState('daily');
   const panelTimer = useRef(null);
   const queuedPanel = useRef(null);
   const [timeUntilReset, setTimeUntilReset] = useState(getTimeUntilAmmanReset);
@@ -1298,6 +1300,21 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
               );
             })}
           </nav>
+          {streak > 0 && (
+            <button
+              type="button"
+              className="menu-streak"
+              onClick={() => {
+                setBoardStart('streak');
+                if (panel !== 'leaderboard' || panelClosing) togglePanel('leaderboard');
+              }}
+              aria-label={`${streak} day streak. Open the streak leaderboard`}
+            >
+              <Flame size={15} strokeWidth={1.8} aria-hidden="true" />
+              <strong>{streak}</strong> DAY STREAK
+              <ArrowUpRight size={13} strokeWidth={1.6} aria-hidden="true" />
+            </button>
+          )}
           {challenge && !challengeDone && (
             <div className="menu-challenge">
               <p><Swords size={11} strokeWidth={1.8} /> {(challenge.by || 'A FRIEND').toUpperCase()}'S CHALLENGE</p>
@@ -1378,7 +1395,7 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
             >
               {panel === 'settings'
                 ? <SettingsContent settings={settings} onSettingsChange={onSettingsChange} />
-                : <LeaderboardContent levelScores={levelScores} player={player} rush={rush} />}
+                : <LeaderboardContent key={boardStart} levelScores={levelScores} player={player} rush={rush} start={boardStart} />}
             </MenuPanel>
           </>
         )}
@@ -1398,7 +1415,7 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
       <div className="menu-footer">
         <span><i /> {completedLevels.length} / 3 GAMES CLEARED TODAY</span>
         <span className="menu-footer-divider" />
-        <span>{streak > 0 ? <><Flame size={10} strokeWidth={2} aria-hidden="true" /> {streak} DAY STREAK</> : 'MOVE WITH INTENTION'}</span>
+        <span>MOVE WITH INTENTION</span>
         <span className="menu-footer-divider" />
         <span className="menu-footer-links">
           <button type="button" onClick={() => onLegal?.('privacy')}>PRIVACY</button>

@@ -124,3 +124,40 @@ def test_each_level_has_its_own_first_run(client, signup):
 
     assert client.get("/api/leaderboard/1", headers=me["headers"]).json()["entries"][0]["time_ms"] == 30000
     assert client.get("/api/leaderboard/3", headers=me["headers"]).json()["entries"][0]["time_ms"] == 45000
+
+
+def test_the_streak_leaderboard_counts_days_in_a_row(tmp_path):
+    from scores import ScoreStore
+
+    store = ScoreStore(tmp_path / "streaks.db")
+    today = "2026-11-14"
+    # Ann: three days in a row up to today, one of them only a Swipe Rush. Bo: today only.
+    # Cy: yesterday and the day before (still alive). Di: a gap, so only today counts.
+    store.submit("2026-11-12", 1, "ann", "Ann", 10000, 5)
+    store.submit_rush("2026-11-13", "ann", "Ann", 4, 9000, 20)
+    store.submit("2026-11-14", 2, "ann", "Ann", 10000, 5)
+    store.submit("2026-11-14", 1, "bo", "Bo", 10000, 5)
+    store.submit("2026-11-12", 1, "cy", "Cy", 10000, 5)
+    store.submit("2026-11-13", 1, "cy", "Cy", 10000, 5)
+    store.submit("2026-11-10", 1, "di", "Di", 10000, 5)
+    store.submit("2026-11-14", 1, "di", "Di", 10000, 5)
+    store.submit("2026-11-08", 1, "ed", "Ed", 10000, 5)  # long ago: no streak at all
+
+    board = store.top_streaks(today, "di")
+    assert [(e["name"], e["streak"], e["days"]) for e in board["entries"]] == [("Ann", 3, 3), ("Cy", 2, 2), ("Di", 1, 2), ("Bo", 1, 1)]
+    assert [e["rank"] for e in board["entries"]] == [1, 2, 3, 4]
+    assert [e["you"] for e in board["entries"]] == [False, False, True, False]
+    assert board["total"] == 4 and board["you"] is None
+
+
+def test_the_streak_leaderboard_lists_up_to_100_and_adds_you_below(client, signup, monkeypatch):
+    today = current_day_key()
+    me = signup("Streaker Me")
+    for number in range(120):
+        main.store.submit(today, 1, f"p{number}", f"Player {number:03d}", 10000, 5)
+    main.store.submit(today, 1, me["user"]["id"], "Streaker Me", 10000, 5)
+    board = client.get("/api/streak/leaderboard", headers=me["headers"]).json()
+    assert len(board["entries"]) == 100 and board["total"] == 121
+    assert board["you"]["name"] == "Streaker Me" and board["you"]["rank"] > 100 and board["you"]["streak"] == 1
+    anonymous = client.get("/api/streak/leaderboard").json()
+    assert anonymous["you"] is None and len(anonymous["entries"]) == 100

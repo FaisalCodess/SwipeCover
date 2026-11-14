@@ -1,11 +1,13 @@
 import sqlite3
 import time
+from datetime import date, timedelta
 from pathlib import Path
 from threading import Lock
 
 NAME_MIN_LENGTH = 3
 NAME_MAX_LENGTH = 16
 TOP_LIMIT = 10
+STREAK_LIMIT = 100
 
 
 def clean_name(name: str) -> str | None:
@@ -156,6 +158,44 @@ class ScoreStore:
                 you = self._rush_standing(day, player_id)
             total = self._db.execute("SELECT COUNT(*) FROM rush_scores WHERE day = ?", (day,)).fetchone()[0]
             return {"entries": entries, "you": you, "total": total}
+
+    def top_streaks(self, today: str, player_id: str | None = None) -> dict:
+        """The longest running streaks of days with a first run (a daily level or Swipe Rush) done.
+
+        A streak is alive if the player's latest day is today or yesterday. Ties go to whoever has
+        played more days in all. Only the first STREAK_LIMIT players are listed; the caller's own
+        place is added when they are further down.
+        """
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT player_id, name, day FROM scores UNION SELECT player_id, name, day FROM rush_scores"
+            ).fetchall()
+        players: dict[str, tuple[str, set[str]]] = {}
+        for row_player, name, day in rows:
+            players.setdefault(row_player, (name, set()))[1].add(day)
+
+        end = date.fromisoformat(today)
+        standings = []
+        for row_player, (name, days) in players.items():
+            cursor = end if today in days else end - timedelta(days=1)
+            streak = 0
+            while cursor.isoformat() in days:
+                streak += 1
+                cursor -= timedelta(days=1)
+            if streak:
+                standings.append((row_player, name, streak, len(days)))
+        standings.sort(key=lambda item: (-item[2], -item[3], item[1].lower()))
+
+        def entry(rank: int, item: tuple) -> dict:
+            return {"rank": rank, "name": item[1], "streak": item[2], "days": item[3], "you": item[0] == player_id}
+
+        entries = [entry(index + 1, item) for index, item in enumerate(standings[:STREAK_LIMIT])]
+        you = None
+        if player_id and not any(item["you"] for item in entries):
+            place = next((index for index, item in enumerate(standings) if item[0] == player_id), None)
+            if place is not None:
+                you = entry(place + 1, standings[place])
+        return {"entries": entries, "you": you, "total": len(standings)}
 
     def _rush_standing(self, day: str, player_id: str) -> dict | None:
         row = self._db.execute(

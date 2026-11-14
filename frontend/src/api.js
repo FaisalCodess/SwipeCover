@@ -178,7 +178,7 @@ async function getJson(path, signal) {
 
 export const fetchLeaderboard = (level, signal) => getJson(`/leaderboard/${level}`, signal);
 export const fetchRushLeaderboard = (signal) => getJson('/rush/leaderboard', signal);
-export const fetchVersusLeaderboard = (signal) => getJson('/versus/leaderboard', signal);
+export const fetchStreakLeaderboard = (signal) => getJson('/streak/leaderboard', signal);
 
 async function postScore(score) {
   let response;

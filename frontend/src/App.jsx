@@ -22,7 +22,7 @@ import Brand from './Brand.jsx';
 import './brand.css';
 import ResultDialog, { PracticeStrip, ResultButton, ResultStanding, ShareButton } from './ResultDialog.jsx';
 import { challengeUrl, clearChallenge, readChallenge } from './share.js';
-import { currentStreak, markPlayed, readStreak } from './streak.js';
+import { backfillStreak, currentStreak, markPlayed, readStreak } from './streak.js';
 import { paintDelay, slideDuration } from './motion.js';
 import './main-menu.css';
 import './game-view.css';
@@ -43,6 +43,7 @@ import {
   RUSH_MS,
   RUSH_READY_MS,
   RUSH_TIMEUP_MS,
+  rushDays,
   rushSnapshot,
   saveRushRoute,
   settleRush,
@@ -488,16 +489,12 @@ function VersusResults({ rush, outcome, onAgain, onHome }) {
   const verdict = outcome ? { win: 'Victory', lose: 'Defeat', draw: 'Draw' }[outcome.outcome] : 'Final score';
   const mode = outcome?.mode || rush.mode;
   const stats = [{ label: 'OPPONENT', value: rush.opponent }];
-  if (outcome?.ranked && outcome.rating !== null) {
-    stats.push({ label: 'RATING', value: `${outcome.rating} (${outcome.delta >= 0 ? '+' : ''}${outcome.delta})` });
-  } else if (outcome) {
-    stats.push({ label: 'MATCH', value: mode === 'quick' ? 'QUICK · UNRATED' : 'FRIENDLY' });
-  }
+  if (outcome) stats.push({ label: 'MATCH', value: mode === 'quick' ? 'QUICK' : 'FRIENDLY' });
   return (
     <ResultDialog
       tone="rush"
       titleId="versus-result-title"
-      kicker={`SWIPE RUSH · 1V1 · ${{ ranked: 'RANKED', quick: 'QUICK MATCH', friends: 'FRIEND MATCH' }[mode] || ''}`.replace(/ · $/, '')}
+      kicker={`SWIPE RUSH · 1V1 · ${{ quick: 'QUICK MATCH', friends: 'FRIEND MATCH' }[mode] || ''}`.replace(/ · $/, '')}
       title={verdict}
       hero={{ label: 'YOU · THEM', value: `${you} – ${them}` }}
       stats={stats}
@@ -525,7 +522,12 @@ export default function App() {
   });
   const [accountDialog, setAccountDialog] = useState(null); // 'rename' | 'delete' | null
   const [challenge, setChallenge] = useState(readChallenge); // a friend's shared result to beat, or null
-  const [streakState, setStreakState] = useState(readStreak);
+  // The streak, worked out again from the runs on this device so one that began before streaks
+  // were counted is not lost.
+  const [streakState, setStreakState] = useState(() => {
+    const days = Object.keys(initial.current.leaderboard).filter((day) => Object.keys(initial.current.leaderboard[day]?.levels || {}).length);
+    return backfillStreak(readStreak(), [...days, ...rushDays()]);
+  });
   const [legal, setLegal] = useState(LEGAL_LINK); // null, 'privacy' or 'terms': the document being read
   // null, or { reason } while the login dialog is open.
   const [showAuth, setShowAuth] = useState(null);
@@ -1190,7 +1192,7 @@ export default function App() {
         setLobby((current) => (current?.status === 'connecting' ? { status: 'menu' } : current));
         break;
       case 'searching':
-        setLobby({ status: 'searching', mode: message.mode, rating: message.rating, range: message.range });
+        setLobby({ status: 'searching', mode: message.mode });
         break;
       case 'room':
         setLobby({ status: 'room', code: message.code, seconds: message.seconds });

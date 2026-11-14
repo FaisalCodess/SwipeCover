@@ -38,3 +38,22 @@ export function currentStreak(state, today) {
   const gap = dayNumber(today) - dayNumber(state.last);
   return gap === 0 || gap === 1 ? state.count : 0;
 }
+
+// A streak that began before streaks were counted lives in the runs already on the device: the
+// days with a first run. This works the streak out from them, and keeps the better of that and
+// what was saved.
+export function backfillStreak(state, days) {
+  const sorted = [...new Set(days)].sort();
+  if (!sorted.length) return state;
+  const last = sorted[sorted.length - 1];
+  let count = 1;
+  for (let index = sorted.length - 1; index > 0 && dayNumber(sorted[index]) - dayNumber(sorted[index - 1]) === 1; index -= 1) count += 1;
+  if (last < state.last || (last === state.last && count <= state.count)) return state;
+  const next = { last, count };
+  try {
+    localStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    // The streak just will not outlive this tab.
+  }
+  return next;
+}

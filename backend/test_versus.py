@@ -56,19 +56,16 @@ def test_quick_match_pairs_two_players_on_the_same_boards(client, signup):
         first, second = until(a, "matched"), until(b, "matched")
     assert first["seed"] == second["seed"] and len(first["seed"]) == 16
     assert (first["opponent"], second["opponent"]) == ("Bobby B", "Alice A")
-    assert not first["ranked"] and first["mode"] == "quick" and 900 <= first["remaining_ms"] <= 1000
+    assert first["mode"] == "quick" and 900 <= first["remaining_ms"] <= 1000
 
 
-def test_each_way_to_play_has_its_own_length(client, signup, monkeypatch):
+def test_a_quick_match_lasts_three_minutes(client, signup, monkeypatch):
     monkeypatch.setattr(versus, "MATCH_SECONDS", None)
-    lengths = {}
-    for mode in ("quick", "ranked"):
-        alice, bobby = signup(f"Alice {mode}"), signup(f"Bobby {mode}")
-        with connect(client, alice) as a, connect(client, bobby) as b:
-            a.send_json({"type": "queue", "mode": mode})
-            b.send_json({"type": "queue", "mode": mode})
-            lengths[mode] = (until(a, "matched")["duration_ms"], until(b, "matched")["duration_ms"])
-    assert lengths == {"quick": (180_000, 180_000), "ranked": (300_000, 300_000)}
+    alice, bobby = signup("Alice A"), signup("Bobby B")
+    with connect(client, alice) as a, connect(client, bobby) as b:
+        a.send_json({"type": "queue", "mode": "quick"})
+        b.send_json({"type": "queue", "mode": "quick"})
+        assert (until(a, "matched")["duration_ms"], until(b, "matched")["duration_ms"]) == (180_000, 180_000)
 
 
 def test_friends_choose_how_long_to_play(client, signup, monkeypatch):
@@ -85,74 +82,9 @@ def test_friends_choose_how_long_to_play(client, signup, monkeypatch):
 
 def test_an_unknown_match_type_is_refused(client, signup):
     with connect(client, signup("Alice A")) as a:
-        a.send_json({"type": "queue", "mode": "chaos"})
-        assert until(a, "error")["message"] == "Pick a match type."
-
-
-def set_rating(player, rating):
-    main.users._db.execute("UPDATE users SET rating = ? WHERE id = ?", (rating, player["user"]["id"]))
-    main.users._db.commit()
-
-
-def test_ranked_matches_the_closest_rating_and_leaves_far_ones_waiting(client, signup, monkeypatch):
-    monkeypatch.setattr(versus, "MATCHMAKER_INTERVAL", 0.05)
-    alice, bobby, carl = signup("Alice A"), signup("Bobby B"), signup("Carl C")
-    for player, rating in ((alice, 1000), (bobby, 1500), (carl, 1050)):
-        set_rating(player, rating)
-    with connect(client, alice) as a, connect(client, bobby) as b, connect(client, carl) as c:
-        a.send_json({"type": "queue", "mode": "ranked"})
-        assert a.receive_json() == {"type": "searching", "mode": "ranked", "rating": 1000, "range": 100}
-        b.send_json({"type": "queue", "mode": "ranked"})
-        c.send_json({"type": "queue", "mode": "ranked"})
-        assert until(a, "matched")["opponent"] == "Carl C" and until(c, "matched")["opponent"] == "Alice A"
-        b.send_json({"type": "cancel"})
-        seen = []
-        while (message := b.receive_json())["type"] != "idle":
-            seen.append(message["type"])
-    assert "matched" not in seen  # 500 points apart: Bobby is still looking
-
-
-def test_the_ranked_search_widens_the_longer_you_wait(client, signup, monkeypatch):
-    monkeypatch.setattr(versus, "MATCHMAKER_INTERVAL", 0.05)
-    monkeypatch.setattr(versus, "RANKED_GROWTH", 2000)  # a few hundred points a tenth of a second
-    alice, bobby = signup("Alice A"), signup("Bobby B")
-    set_rating(alice, 1000)
-    set_rating(bobby, 1400)
-    with connect(client, alice) as a, connect(client, bobby) as b:
-        a.send_json({"type": "queue", "mode": "ranked"})
-        b.send_json({"type": "queue", "mode": "ranked"})
-        widths = []
-        while (message := a.receive_json())["type"] != "matched":
-            widths.append(message["range"])
-        assert widths == sorted(widths) and widths[0] == 100 and widths[-1] < 400 + 2000 * 0.2
-        assert until(b, "matched")["opponent"] == "Alice A"
-
-
-def test_quick_and_ranked_queues_do_not_mix(client, signup, monkeypatch):
-    monkeypatch.setattr(versus, "MATCHMAKER_INTERVAL", 0.05)
-    alice, bobby = signup("Alice A"), signup("Bobby B")
-    with connect(client, alice) as a, connect(client, bobby) as b:
-        a.send_json({"type": "queue", "mode": "quick"})
-        b.send_json({"type": "queue", "mode": "ranked"})
-        for socket in (a, b):
-            socket.send_json({"type": "cancel"})
-            seen = []
-            while (message := socket.receive_json())["type"] != "idle":
-                seen.append(message["type"])
-            assert "matched" not in seen
-
-
-def test_only_ranked_matches_move_ratings(client, signup):
-    alice, bobby = signup("Alice A"), signup("Bobby B")
-    with connect(client, alice) as a, connect(client, bobby) as b:
-        a.send_json({"type": "queue", "mode": "quick"})
-        b.send_json({"type": "queue", "mode": "quick"})
-        seed = until(a, "matched")["seed"]
-        a.send_json({"type": "solved", "index": 0, "route": route_for(seed, 0)})
-        result = until(a, "result")
-        until(b, "result")
-    assert result["mode"] == "quick" and result["rating"] is None and result["delta"] == 0
-    assert client.get("/api/versus/leaderboard").json()["entries"] == []
+        for mode in ("chaos", "ranked"):
+            a.send_json({"type": "queue", "mode": mode})
+            assert until(a, "error")["message"] == "Pick a match type."
 
 
 def test_every_match_gets_new_boards(client, signup):
@@ -171,8 +103,8 @@ def test_every_match_gets_new_boards(client, signup):
 def test_boards_are_scored_in_order_and_the_better_player_wins(client, signup):
     alice, bobby = signup("Alice A"), signup("Bobby B")
     with connect(client, alice) as a, connect(client, bobby) as b:
-        a.send_json({"type": "queue", "mode": "ranked"})
-        b.send_json({"type": "queue", "mode": "ranked"})
+        a.send_json({"type": "queue", "mode": "quick"})
+        b.send_json({"type": "queue", "mode": "quick"})
         seed = until(a, "matched")["seed"]
         until(b, "matched")
 
@@ -185,8 +117,6 @@ def test_boards_are_scored_in_order_and_the_better_player_wins(client, signup):
         won, lost = until(a, "result"), until(b, "result")
     assert (won["outcome"], won["you"], won["them"]) == ("win", 2, 0)
     assert (lost["outcome"], lost["you"], lost["them"]) == ("lose", 0, 2)
-    assert won["delta"] > 0 and lost["delta"] == -won["delta"]
-    assert won["rating"] == 1000 + won["delta"]
 
 
 def test_cheating_does_not_score(client, signup):
@@ -250,7 +180,7 @@ def test_a_tie_goes_to_whoever_got_there_first(client, signup, monkeypatch):
         assert until(b, "result")["outcome"] == "win"
 
 
-def test_friends_play_with_a_code_and_it_does_not_change_ratings(client, signup):
+def test_friends_play_with_a_code(client, signup):
     alice, bobby = signup("Alice A"), signup("Bobby B")
     with connect(client, alice) as a, connect(client, bobby) as b:
         a.send_json({"type": "create"})
@@ -258,12 +188,11 @@ def test_friends_play_with_a_code_and_it_does_not_change_ratings(client, signup)
         assert len(code) == 5
         b.send_json({"type": "join", "code": code.lower()})
         first, second = until(a, "matched"), until(b, "matched")
-        assert not first["ranked"] and first["mode"] == "friends" and first["seed"] == second["seed"]
+        assert first["mode"] == "friends" and first["seed"] == second["seed"]
         a.send_json({"type": "solved", "index": 0, "route": route_for(first["seed"], 0)})
         result = until(a, "result")
         until(b, "result")
-    assert result["outcome"] == "win" and result["rating"] is None and result["delta"] == 0
-    assert client.get("/api/versus/leaderboard").json()["entries"] == []
+    assert result["outcome"] == "win" and result["mode"] == "friends"
 
 
 def test_bad_codes_and_double_booking(client, signup):
@@ -307,18 +236,3 @@ def test_rejoining_a_running_match(client, signup, monkeypatch):
             back = until(again, "matched")
             assert back["seed"] == seed and back["you"] == 1 and back["them"] == 0
             assert until(again, "result")["outcome"] == "win"
-
-
-def test_the_versus_leaderboard_ranks_by_rating(client, signup):
-    alice, bobby = signup("Alice A"), signup("Bobby B")
-    with connect(client, alice) as a, connect(client, bobby) as b:
-        a.send_json({"type": "queue", "mode": "ranked"})
-        b.send_json({"type": "queue", "mode": "ranked"})
-        seed = until(a, "matched")["seed"]
-        a.send_json({"type": "solved", "index": 0, "route": route_for(seed, 0)})
-        until(a, "result")
-        until(b, "result")
-    board = client.get("/api/versus/leaderboard", headers=bobby["headers"]).json()
-    assert [(e["name"], e["wins"], e["losses"]) for e in board["entries"]] == [("Alice A", 1, 0), ("Bobby B", 0, 1)]
-    assert board["entries"][0]["rating"] > 1000 > board["entries"][1]["rating"]
-    assert [e["you"] for e in board["entries"]] == [False, True] and board["total"] == 2

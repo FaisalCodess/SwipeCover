@@ -80,6 +80,9 @@ function clean(entry) {
   };
 }
 
+// Days on this device with a Swipe Rush played (it was started, so at least the first run exists).
+export const rushDays = () => Object.keys(readAll()).filter((day) => clean(readAll()[day]));
+
 export function getRush(day) {
   return clean(readAll()[day]);
 }

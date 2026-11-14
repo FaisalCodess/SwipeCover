@@ -236,10 +236,6 @@ def _public(user: dict) -> dict:
         "username": user["username"],
         "email": user["email"],
         "has_password": bool(user["password_hash"]),
-        "rating": user["rating"],
-        "wins": user["wins"],
-        "losses": user["losses"],
-        "draws": user["draws"],
     }
 
 
@@ -570,11 +566,11 @@ def leaderboard(
     return {"day": day, "level": level, **store.top(day, level, user["id"] if user else None)}
 
 
-@app.get("/api/versus/leaderboard")
-def versus_leaderboard(response: Response, user: dict | None = Depends(optional_user)) -> dict:
-    """The best 1v1 players by rating, plus the caller's own place when they are outside the top 10."""
+@app.get("/api/streak/leaderboard")
+def streak_leaderboard(response: Response, user: dict | None = Depends(optional_user)) -> dict:
+    """The longest running day streaks (up to 100 players), plus the caller's own place when they are outside them."""
     response.headers["Cache-Control"] = "no-store"
-    return users.top_versus(user["id"] if user else None)
+    return store.top_streaks(current_day_key(), user["id"] if user else None)
 
 
 def _origin_allowed(websocket: WebSocket) -> bool:

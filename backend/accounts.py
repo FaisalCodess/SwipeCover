@@ -1,4 +1,4 @@
-"""Player accounts: the users table, login sessions and 1v1 ratings.
+"""Player accounts: the users table and login sessions.
 
 Passwords are hashed with scrypt (standard library, no extra dependency) and sessions are random
 tokens of which only a SHA-256 hash is stored, so a copy of the database can neither reveal a
@@ -20,7 +20,6 @@ SESSION_SECONDS = 30 * 24 * 60 * 60
 RESET_SECONDS = 15 * 60
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
-RATING_K = 32
 EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$")
 SCRYPT = {"n": 2**14, "r": 8, "p": 1, "maxmem": 64 * 1024 * 1024}
 
@@ -71,10 +70,6 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def expected_score(rating: float, other: float) -> float:
-    return 1 / (1 + 10 ** ((other - rating) / 400))
-
-
 class RateLimiter:
     """Allows `limit` hits per `window` seconds for each key. In memory, so per server process."""
 
@@ -113,18 +108,13 @@ class UserStore:
                 password_hash TEXT,
                 google_sub TEXT,
                 email_verified INTEGER NOT NULL DEFAULT 0,
-                created_at REAL NOT NULL,
-                rating INTEGER NOT NULL DEFAULT 1000,
-                wins INTEGER NOT NULL DEFAULT 0,
-                losses INTEGER NOT NULL DEFAULT 0,
-                draws INTEGER NOT NULL DEFAULT 0
+                created_at REAL NOT NULL
             )
             """
         )
         self._db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users (email)")
         self._db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_username ON users (username_lower)")
         self._db.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_google ON users (google_sub) WHERE google_sub IS NOT NULL")
-        self._db.execute("CREATE INDEX IF NOT EXISTS users_rating ON users (rating DESC, wins DESC)")
         self._db.execute(
             """
             CREATE TABLE IF NOT EXISTS sessions (
@@ -143,21 +133,6 @@ class UserStore:
             )
             """
         )
-        self._db.execute(
-            """
-            CREATE TABLE IF NOT EXISTS matches (
-                id TEXT PRIMARY KEY,
-                seed TEXT NOT NULL,
-                player_a TEXT NOT NULL,
-                player_b TEXT NOT NULL,
-                score_a INTEGER NOT NULL,
-                score_b INTEGER NOT NULL,
-                winner TEXT,
-                ranked INTEGER NOT NULL,
-                finished_at REAL NOT NULL
-            )
-            """
-        )
         self._db.commit()
 
     # ---- accounts ----
@@ -166,10 +141,10 @@ class UserStore:
     def _row(row) -> dict | None:
         if row is None:
             return None
-        keys = ("id", "email", "username", "password_hash", "google_sub", "email_verified", "rating", "wins", "losses", "draws")
+        keys = ("id", "email", "username", "password_hash", "google_sub", "email_verified")
         return dict(zip(keys, row))
 
-    _COLUMNS = "id, email, username, password_hash, google_sub, email_verified, rating, wins, losses, draws"
+    _COLUMNS = "id, email, username, password_hash, google_sub, email_verified"
 
     def _one(self, where: str, *args) -> dict | None:
         with self._lock:
@@ -219,14 +194,10 @@ class UserStore:
         return self.by_id(user_id)
 
     def delete(self, user_id: str) -> None:
-        """Removes the account and its logins. Past matches stay (the other player's history), but
-        no longer name this player."""
+        """Removes the account and its logins."""
         with self._lock:
             self._db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
             self._db.execute("DELETE FROM password_resets WHERE user_id = ?", (user_id,))
-            self._db.execute("UPDATE matches SET player_a = 'deleted' WHERE player_a = ?", (user_id,))
-            self._db.execute("UPDATE matches SET player_b = 'deleted' WHERE player_b = ?", (user_id,))
-            self._db.execute("UPDATE matches SET winner = 'deleted' WHERE winner = ?", (user_id,))
             self._db.execute("DELETE FROM users WHERE id = ?", (user_id,))
             self._db.commit()
 
@@ -304,48 +275,3 @@ class UserStore:
             self._db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
             self._db.commit()
         return self.by_id(user_id)
-
-    # ---- 1v1 ----
-
-    def record_match(self, match_id: str, seed: str, a: str, b: str, score_a: int, score_b: int, outcome_a: float, ranked: bool) -> dict:
-        """Stores a finished match. `outcome_a` is 1 if `a` won, 0 if `b` did, 0.5 for a draw.
-        Ranked matches move both ratings; returns each player's new rating and the change."""
-        with self._lock:
-            result = {a: (None, 0), b: (None, 0)}
-            if ranked:
-                rating = {uid: self._db.execute("SELECT rating FROM users WHERE id = ?", (uid,)).fetchone()[0] for uid in (a, b)}
-                change_a = round(RATING_K * (outcome_a - expected_score(rating[a], rating[b])))
-                for uid, delta, outcome in ((a, change_a, outcome_a), (b, -change_a, 1 - outcome_a)):
-                    column = "wins" if outcome == 1 else "losses" if outcome == 0 else "draws"
-                    self._db.execute(f"UPDATE users SET rating = rating + ?, {column} = {column} + 1 WHERE id = ?", (delta, uid))
-                    result[uid] = (rating[uid] + delta, delta)
-            winner = a if outcome_a == 1 else b if outcome_a == 0 else None
-            self._db.execute(
-                "INSERT INTO matches (id, seed, player_a, player_b, score_a, score_b, winner, ranked, finished_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (match_id, seed, a, b, score_a, score_b, winner, int(ranked), time.time()),
-            )
-            self._db.commit()
-        return result
-
-    def top_versus(self, user_id: str | None = None, limit: int = 10) -> dict:
-        with self._lock:
-            rows = self._db.execute(
-                "SELECT id, username, rating, wins, losses, draws FROM users WHERE wins + losses + draws > 0 "
-                "ORDER BY rating DESC, wins DESC, created_at LIMIT ?",
-                (limit,),
-            ).fetchall()
-            entries = [
-                {"rank": index + 1, "name": name, "rating": rating, "wins": wins, "losses": losses, "draws": draws, "you": uid == user_id}
-                for index, (uid, name, rating, wins, losses, draws) in enumerate(rows)
-            ]
-            you = None
-            if user_id and not any(entry["you"] for entry in entries):
-                row = self._db.execute("SELECT username, rating, wins, losses, draws FROM users WHERE id = ?", (user_id,)).fetchone()
-                if row and sum(row[2:]) > 0:
-                    ahead = self._db.execute(
-                        "SELECT COUNT(*) FROM users WHERE wins + losses + draws > 0 AND (rating > ? OR (rating = ? AND wins > ?))",
-                        (row[1], row[1], row[2]),
-                    ).fetchone()[0]
-                    you = {"rank": ahead + 1, "name": row[0], "rating": row[1], "wins": row[2], "losses": row[3], "draws": row[4], "you": True}
-            total = self._db.execute("SELECT COUNT(*) FROM users WHERE wins + losses + draws > 0").fetchone()[0]
-        return {"entries": entries, "you": you, "total": total}

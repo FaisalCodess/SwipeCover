@@ -58,7 +58,7 @@ level's difficulty rules, and that the API behaves. They also check that the bro
 board generator (`frontend/src/generator.js`) builds exactly the same daily and Swipe
 Rush and 1v1 boards as the server (Node.js is needed for that one), that Swipe Rush runs
 are verified, ranked and counted first-run-only as described below, and that accounts,
-logins and the 1v1 matches (matchmaking, scoring, cheating attempts, ratings) behave.
+logins, the streak leaderboard and the 1v1 matches (matchmaking, scoring, cheating attempts) behave.
 
 ## Deploy
 
@@ -167,8 +167,14 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
 - Opening such a link shows "Sam's challenge" on the menu, and the result screen after the
   player's own run says how they did against it. A challenge only counts on the day it was set,
   because the puzzles change at midnight; an older link is ignored.
-- The menu footer shows a **day streak**: days in a row with a first run done (a daily level or
-  Swipe Rush). It is kept in `localStorage` on the device (`frontend/src/streak.js`).
+- The menu shows a **day streak** chip: days in a row with a first run done (a daily level or
+  Swipe Rush). It is kept in `localStorage` on the device (`frontend/src/streak.js`) and is worked
+  out again from the runs on the device at load, so a streak that began before streaks were
+  counted is not lost. Pressing the chip opens the STREAK leaderboard.
+- The leaderboard's **STREAK** tab (`GET /api/streak/leaderboard`, `top_streaks` in `scores.py`) lists
+  up to 100 players by running streak, worked out on the server from their submitted first runs.
+  A streak is alive while the player's latest day is today or yesterday. Ties go to whoever has
+  played more days. The player's own place is added below the list when they are further down.
 - Link previews (WhatsApp, Discord, X) use `frontend/public/og.jpg` and the `og:` tags in
   `frontend/index.html`. Those tags hold the full address of the site, so change them when the
   domain changes.
@@ -179,8 +185,7 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
   email, username and password, or with Google. Usernames are 3-16 letters, numbers, spaces,
   `_` or `-`, and are unique ignoring case. Passwords need 8+ characters.
 - Everything lives in the same SQLite file as the scores (`SCORES_DB`): the `users` table
-  (id, email, username, password hash or Google id, rating and win/loss record), `sessions`
-  and `matches`. Passwords are hashed with scrypt; login tokens are random and only their
+  (id, email, username, password hash or Google id) and `sessions`. Passwords are hashed with scrypt; login tokens are random and only their
   SHA-256 is stored. The browser keeps the token in `localStorage` and sends it as
   `Authorization: Bearer ...`. A session lasts 30 days; logging out ends it on the server.
 - The server takes the player's identity from the token only. A request can no longer
@@ -209,20 +214,14 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
 
 ## 1v1 Swipe Rush
 
-- **1 V 1 RUSH** on the menu (login needed) has three ways to play:
-  - **Quick match**: 3 minutes against the next player searching. No rating.
-  - **Ranked**: 5 minutes against a player with a close rating. Moves both Elo ratings.
-    Matchmaking accepts ratings within 100 points at first and widens by 15 points per second
-    waited (`RANKED_BASE_WINDOW`, `RANKED_GROWTH` in `versus.py`), so nobody waits forever.
-    The lobby shows the rating range being searched.
+- **1 V 1 RUSH** on the menu (login needed) has two ways to play:
+  - **Quick match**: 3 minutes against the next player searching.
   - **Friend match**: the host picks 1, 3 or 5 minutes and gets a 5-letter code to send; the
-    friend enters it under "Have a code?". No rating.
+    friend enters it under "Have a code?".
 - Both players fall into the cave together, get a 3-2-1, and race on the **same boards**. Whoever clears more wins; on a tie, whoever cleared their last board sooner; nothing
   cleared by either is a draw. Every match uses a fresh random seed, so unlike the daily
   boards every match plays on new maps (same difficulty curve as Swipe Rush, `RUSH_TIERS`).
-- Ranked matches move an Elo rating (start 1000, K=32). The leaderboard's **RANKED** section ranks
-  by rating and shows wins and losses. (The leaderboard has three sections: **DAILY** with a
-  level picker inside it, **RUSH** and **RANKED**.)
+- The leaderboard has three sections: **DAILY** with a level picker inside it, **RUSH** and **STREAK**.
 - How it is kept honest (`backend/versus.py`): the server picks the seed, keeps the clock and the
   score, and only counts a board when the player sends a route that clears *that* board, in
   order, replayed on the server's own copy (the browser builds boards from the seed so play is

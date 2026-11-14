@@ -1,18 +1,18 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, LoaderCircle, Swords, TriangleAlert, Users, X, Zap } from 'lucide-react';
+import { Check, Copy, LoaderCircle, TriangleAlert, Users, X, Zap } from 'lucide-react';
 import { BoardFrame } from './MainMenu.jsx';
 import { ResultButton } from './ResultDialog.jsx';
 import './result.css';
 import './versus.css';
 
 const MATCH_RULES = 'SAME BOARDS FOR BOTH · MOST MAPS WINS';
-// How long a friend match can last, in seconds. Quick and ranked matches have fixed lengths (server).
+// How long a friend match can last, in seconds. A quick match is always three minutes (server).
 const FRIEND_LENGTHS = [60, 180, 300];
 const DEFAULT_LENGTH = 180;
 
 const minutes = (seconds) => `${seconds / 60} MIN`;
 
-// Before a 1v1: a quick match, a ranked match, or a friend match with a code. `lobby.status` says where
+// Before a 1v1: a quick match, or a friend match with a code. `lobby.status` says where
 // it is: connecting, menu (choose), searching (in a queue), room (waiting for a friend), offline.
 export default function VersusLobby({ lobby, onQueue, onCreate, onJoin, onCancel, onClose, onRetry }) {
   const [code, setCode] = useState('');
@@ -48,29 +48,11 @@ export default function VersusLobby({ lobby, onQueue, onCreate, onJoin, onCancel
         <div className="result-actions"><ResultButton onClick={onClose}>CLOSE</ResultButton><ResultButton primary onClick={onRetry}>TRY AGAIN</ResultButton></div>
       </>
     );
-  } else if (status === 'searching' && lobby.mode === 'ranked') {
-    const low = Math.max(0, lobby.rating - lobby.range);
-    const high = lobby.rating + lobby.range;
-    body = (
-      <>
-        <p className="versus-wait"><LoaderCircle size={16} className="menu-spin" /> SEARCHING · RANKED</p>
-        <div className="versus-range" role="status" aria-label={`Looking for ratings between ${low} and ${high}`}>
-          <div className="versus-range-scale" aria-hidden="true">
-            <b>{low}</b>
-            <span className="versus-range-line"><i /><em>{lobby.rating}</em></span>
-            <b>{high}</b>
-          </div>
-          <p>YOUR RATING {lobby.rating} · LOOKING WITHIN ±{lobby.range}</p>
-          <small>THE SEARCH WIDENS THE LONGER YOU WAIT, SO YOU ALWAYS FIND A GAME</small>
-        </div>
-        <div className="versus-single"><ResultButton onClick={onCancel}>CANCEL</ResultButton></div>
-      </>
-    );
   } else if (status === 'searching') {
     body = (
       <>
         <p className="versus-wait"><LoaderCircle size={16} className="menu-spin" /> SEARCHING · QUICK MATCH</p>
-        <p className="versus-sub">YOU&apos;LL BE PAIRED WITH THE NEXT PLAYER LOOKING · 3 MIN · NO RATING</p>
+        <p className="versus-sub">YOU&apos;LL BE PAIRED WITH THE NEXT PLAYER LOOKING · 3 MIN</p>
         <div className="versus-single"><ResultButton onClick={onCancel}>CANCEL</ResultButton></div>
       </>
     );
@@ -91,17 +73,11 @@ export default function VersusLobby({ lobby, onQueue, onCreate, onJoin, onCancel
       <>
         <button type="button" className="versus-choice" onClick={() => onQueue('quick')} autoFocus>
           <Zap size={20} strokeWidth={1.4} />
-          <span><b>QUICK MATCH</b><small>3 MIN · ANYONE ONLINE · NO RATING</small></span>
+          <span><b>QUICK MATCH</b><small>3 MIN · ANYONE ONLINE</small></span>
           <em>3:00</em>
         </button>
-        <button type="button" className="versus-choice is-primary" onClick={() => onQueue('ranked')}>
-          <Swords size={20} strokeWidth={1.4} />
-          <span><b>RANKED</b><small>5 MIN · CLOSE RATING · RATED</small></span>
-          <em>5:00</em>
-        </button>
-
         <div className="versus-friends">
-          <p className="versus-group"><Users size={12} strokeWidth={1.6} /> PLAY A FRIEND · NO RATING</p>
+          <p className="versus-group"><Users size={12} strokeWidth={1.6} /> PLAY A FRIEND</p>
           <div className="versus-lengths" role="radiogroup" aria-label="Match length">
             {FRIEND_LENGTHS.map((seconds) => (
               <button
