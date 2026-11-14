@@ -254,7 +254,7 @@ export function useRushPressure(endsAt, active, onTick) {
 // ---------- The screen's furniture ----------
 
 // `versus` ({ opponent, you, them }) turns it into a 1v1 scoreboard.
-export function RushHud({ solved, endsAt, ranked, versus = null, totalMs = RUSH_MS }) {
+export function RushHud({ solved, endsAt, ranked, versus = null, totalMs = RUSH_MS, children }) {
   return (
     <>
       <div className="game-hud rush-hud">
@@ -279,6 +279,7 @@ export function RushHud({ solved, endsAt, ranked, versus = null, totalMs = RUSH_
             </span>
           )}
         </div>
+        {children}
         <div className="rush-clock">
           <Timer size={18} strokeWidth={1.5} />
           <CountdownText endsAt={endsAt} totalMs={totalMs} className="rush-countdown tabular-nums" />

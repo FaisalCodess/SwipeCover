@@ -3,6 +3,7 @@ import {
   ArrowRight,
   ChevronLeft,
   Clock3,
+  Gamepad2,
   Keyboard,
   LoaderCircle,
   Moon,
@@ -21,6 +22,8 @@ import MainMenu, { BoardFrame, CutFrame, keyShape, SkyAbove } from './MainMenu.j
 import BackgroundMusic from './BackgroundMusic.jsx';
 import { CaveBelow, RushBanner, RushHud, useRushPressure } from './Rush.jsx';
 import BoardBall from './BoardBall.jsx';
+import SwipePad from './SwipePad.jsx';
+import { useSwipe } from './swipe.js';
 import Brand from './Brand.jsx';
 import './brand.css';
 import ResultDialog,{ PracticeStrip, ResultButton, ResultStanding } from './ResultDialog.jsx';
@@ -88,6 +91,8 @@ const DEFAULT_SETTINGS = {
   sfx: true,
   musicVolume: 70,
   sfxVolume: 65,
+  // The on-screen swipe pad is on by default where the screen is touched, off where there is a mouse.
+  swipePad: typeof window !== 'undefined' && Boolean(window.matchMedia?.('(pointer: coarse)').matches),
 };
 
 function pruneLeaderboard(leaderboard, today) {
@@ -238,6 +243,16 @@ function GameChip({ children, className = '', ...props }) {
   );
 }
 
+// Restart sits in the row above the board, away from the thumb, because below the board it kept
+// being pressed by accident. On a phone it shrinks to just its icon.
+function RestartChip({ onClick, disabled }) {
+  return (
+    <GameChip className="game-chip-restart" onClick={onClick} disabled={disabled} aria-label="Restart level" title="Restart (R)">
+      <RotateCcw size={14} strokeWidth={1.6} /> <span className="game-chip-text">RESTART</span>
+    </GameChip>
+  );
+}
+
 function Panel({ children, className = '' }) {
   return (
     <section className={`panel rounded-3xl border border-line/[0.08] shadow-2xl shadow-black/10 ${className}`}>
@@ -357,6 +372,13 @@ function SettingsDialog({ settings, onSettingsChange, onClose, closing }) {
               </div>
               <Switch label="Sound effects" checked={settings.sfx} onChange={(sfx) => onSettingsChange({ ...settings, sfx })} />
             </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Gamepad2 size={18} className={settings.swipePad ? 'text-accent' : 'text-faint'} />
+                <div><p className="text-sm font-semibold">Swipe pad</p><p className="text-xs text-muted">On-screen pad to steer with a thumb</p></div>
+              </div>
+              <Switch label="Swipe pad" checked={settings.swipePad} onChange={(swipePad) => onSettingsChange({ ...settings, swipePad })} />
+            </div>
             {[
               { key: 'musicVolume', label: 'Music volume' },
               { key: 'sfxVolume', label: 'Sound effects volume' },
@@ -393,46 +415,21 @@ function SettingsDialog({ settings, onSettingsChange, onClose, closing }) {
 }
 
 // `mapKey` is set in Swipe Rush: each new board is a fresh grid that drops in.
-function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey }) {
-  const gesture = useRef(null);
+function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey, swipeEnabled = true }) {
+  const swipe = useSwipe(onMove);
   const { board, player } = run;
   const rows = board.length;
   const cols = board[0].length;
   const celebrating = phase === 'celebrating' || phase === 'won' || phase === 'advancing';
 
   function handlePointerDown(event) {
-    // Only a board in play takes swipes. Capturing the pointer sends the follow-up click to the
-    // board instead of the button that was pressed, which left the pause cover's Resume button dead.
-    if (phase !== 'playing') return;
+    // Only a board in play takes swipes, and not when the swipe pad has taken over. Capturing the
+    // pointer sends the follow-up click to the board instead of the button that was pressed, which
+    // left the pause cover's Resume button dead.
+    if (!swipeEnabled || phase !== 'playing') return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
-    gesture.current = { x: event.clientX, y: event.clientY, id: event.pointerId };
+    swipe.start(event);
     event.currentTarget.setPointerCapture?.(event.pointerId);
-  }
-
-  // Fire as soon as the swipe is long enough instead of waiting for the finger to lift. The finger
-  // can then carry on and turn (right, then down, ...) to chain moves in one stroke.
-  function handlePointerMove(event) {
-    const start = gesture.current;
-    if (!start || start.id !== event.pointerId) return;
-    if (start.last) {
-      // Carrying on the way the last swipe went only moves the starting point along with the
-      // finger, so a turn is measured from where it begins. (Sliding the same way twice in a row
-      // never does anything: the ball is already against the wall.)
-      const [lastRow, lastCol] = DIRECTION_STEPS[start.last];
-      const ahead = (event.clientX - start.x) * lastCol + (event.clientY - start.y) * lastRow;
-      if (ahead > 0) {
-        start.x += ahead * lastCol;
-        start.y += ahead * lastRow;
-      }
-    }
-    const deltaX = event.clientX - start.x;
-    const deltaY = event.clientY - start.y;
-    if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 22) return;
-    const direction = Math.abs(deltaX) > Math.abs(deltaY)
-      ? (deltaX > 0 ? 'right' : 'left')
-      : (deltaY > 0 ? 'down' : 'up');
-    gesture.current = { x: event.clientX, y: event.clientY, id: event.pointerId, last: direction };
-    onMove(direction);
   }
 
   return (
@@ -440,9 +437,9 @@ function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey }) {
       className="board-touch game-board-frame"
       data-phase={phase}
       onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={() => { gesture.current = null; }}
-      onPointerCancel={() => { gesture.current = null; }}
+      onPointerMove={swipe.move}
+      onPointerUp={swipe.end}
+      onPointerCancel={swipe.end}
     >
       <BoardFrame />
       {/* The ball and its sparks sit beside the grid, not in it: a new Swipe Rush board swaps the
@@ -1740,7 +1737,7 @@ export default function App() {
       </button>
       <div className={`camera ${travel ? `camera-${travel}` : ''}`}>
       {dailyRun && (screen === 'game' || travel) && (
-        <section className={`duel-menu game-view ${gameLive ? 'is-live' : ''}`} aria-label="Swipe Cover game">
+        <section className={`duel-menu game-view ${settings.swipePad ? 'has-pad' : ''} ${gameLive ? 'is-live' : ''}`} aria-label="Swipe Cover game">
           <SkyAbove />
           <div className="menu-grain" aria-hidden="true" />
 
@@ -1776,6 +1773,7 @@ export default function App() {
                   })}
                 </span>
               </div>
+              <RestartChip onClick={restartLevel} disabled={!playing || run.moves === 0} />
               <div className="game-timer">
                 <Clock3 size={16} strokeWidth={1.5} />
                 <TimerText read={stopwatch.read} className="game-timer-text tabular-nums" />
@@ -1789,6 +1787,7 @@ export default function App() {
               phase={phase}
               onMove={requestMove}
               onResume={resumeGame}
+              swipeEnabled={!settings.swipePad}
             />
 
             <div className="game-statusbar">
@@ -1801,13 +1800,11 @@ export default function App() {
               <GameChip onClick={undoMove} disabled={!playing || !run.history.length}>
                 <Undo2 size={14} strokeWidth={1.6} /> UNDO
               </GameChip>
-              <GameChip onClick={restartLevel} disabled={!playing || run.moves === 0}>
-                <RotateCcw size={14} strokeWidth={1.6} /> RESTART
-              </GameChip>
               <GameChip onClick={() => pauseGame('manual')} disabled={!playing}>
                 <Pause size={14} strokeWidth={1.6} /> PAUSE
               </GameChip>
             </div>
+            {settings.swipePad && <SwipePad onMove={requestMove} disabled={phase !== 'playing'} />}
           </div>
         </section>
       )}
@@ -1835,7 +1832,7 @@ export default function App() {
       {/* Below the menu, so the camera falls to it: Swipe Rush, played in a cave. */}
       {rushRun && rush && (screen === 'rush' || travel === 'dive' || travel === 'rise') && (
         <section
-          className={`duel-menu game-view rush-view ${gameLive ? 'is-live' : ''}`}
+          className={`duel-menu game-view rush-view ${settings.swipePad ? 'has-pad' : ''} ${gameLive ? 'is-live' : ''}`}
           data-heat={heat}
           aria-label="Swipe Rush"
         >
@@ -1866,7 +1863,9 @@ export default function App() {
               ranked={rush.ranked}
               versus={rush.versus ? { opponent: rush.opponent, you: rush.you, them: rush.them, mode: rush.mode } : null}
               totalMs={rush.versus ? rush.totalMs : undefined}
-            />
+            >
+              <RestartChip onClick={restartLevel} disabled={!playing || rushRun.moves === 0} />
+            </RushHud>
 
             <GameBoard
               run={rushRun}
@@ -1876,6 +1875,7 @@ export default function App() {
               onMove={requestMove}
               onResume={resumeGame}
               mapKey={rushRun.index}
+              swipeEnabled={!settings.swipePad}
             />
 
             <div className="game-statusbar">
@@ -1889,10 +1889,8 @@ export default function App() {
               <GameChip onClick={undoMove} disabled={!playing || !rushRun.history.length}>
                 <Undo2 size={14} strokeWidth={1.6} /> UNDO
               </GameChip>
-              <GameChip onClick={restartLevel} disabled={!playing || rushRun.moves === 0}>
-                <RotateCcw size={14} strokeWidth={1.6} /> RESTART
-              </GameChip>
             </div>
+            {settings.swipePad && <SwipePad onMove={requestMove} disabled={phase !== 'playing'} />}
           </div>
           <RushBanner banner={banner} />
           {banner && (

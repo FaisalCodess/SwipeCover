@@ -24,9 +24,12 @@ function formatCountdown(milliseconds) {
   return [hours, minutes, seconds].map((unit) => String(unit).padStart(2, '0')).join(':');
 }
 
-function createMotes(width, height, hues) {
-  const amount = Math.min(100, Math.max(38, Math.round(width * height / 15000)));
-  return Array.from({ length: amount }, () => ({
+function moteCount(width, height) {
+  return Math.min(100, Math.max(38, Math.round(width * height / 15000)));
+}
+
+function createMote(width, height, hues) {
+  return {
     x: Math.random() * width,
     y: Math.random() * height,
     radius: Math.random() * 1.6 + 0.45,
@@ -35,7 +38,7 @@ function createMotes(width, height, hues) {
     hue: Math.random() > 0.56 ? hues[0] : hues[1],
     alpha: Math.random() * 0.48 + 0.2,
     length: Math.random() * 16 + 8,
-  }));
+  };
 }
 
 // Pre-rendered glow, because canvas shadowBlur on every mote is too slow on phones.
@@ -54,8 +57,32 @@ function createGlowSprite(hue) {
   return sprite;
 }
 
+// The fading tail behind a spark, also drawn once. It runs from the top right (the spark) to the
+// bottom left, and is stretched to each spark's own length when stamped, so the angle never changes.
+const STREAK_W = 19;
+const STREAK_H = 32;
+function createStreakSprite(hue) {
+  const sprite = document.createElement('canvas');
+  sprite.width = STREAK_W + 4;
+  sprite.height = STREAK_H + 4;
+  const context = sprite.getContext('2d');
+  const gradient = context.createLinearGradient(STREAK_W + 2, 2, 2, STREAK_H + 2);
+  gradient.addColorStop(0, `hsla(${hue}, 96%, 70%, 1)`);
+  gradient.addColorStop(1, `hsla(${hue}, 96%, 60%, 0)`);
+  context.strokeStyle = gradient;
+  context.lineWidth = 3;
+  context.lineCap = 'round';
+  context.beginPath();
+  context.moveTo(STREAK_W + 2, 2);
+  context.lineTo(2, STREAK_H + 2);
+  context.stroke();
+  return sprite;
+}
+
 // Drifting sparks. `hues` are the two colours (red and cyan in the sky; ember orange in the
 // cave), and `rise` scales how fast they climb, so the cave can speed them up as time runs out.
+// Motion is measured in seconds, not frames, so it looks the same at any frame rate, and a resize
+// moves the sparks along with the screen instead of throwing them to new random places.
 export function EmberField({ hues = [354, 192], rise = 1 }) {
   const canvasRef = useRef(null);
   const riseRef = useRef(rise);
@@ -65,54 +92,30 @@ export function EmberField({ hues = [354, 192], rise = 1 }) {
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
     const glowSprites = Object.fromEntries(hues.map((hue) => [hue, createGlowSprite(hue)]));
+    const streakSprites = Object.fromEntries(hues.map((hue) => [hue, createStreakSprite(hue)]));
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    let frame;
+    let frame = 0;
     let width = 0;
     let height = 0;
+    let pixelRatio = 1;
     let motes = [];
-    let lastFrame = 0;
+    let lastTime = 0;
 
-    function resize() {
-      const bounds = canvas.getBoundingClientRect();
-      const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
-      width = bounds.width;
-      height = bounds.height;
-      canvas.width = Math.round(width * pixelRatio);
-      canvas.height = Math.round(height * pixelRatio);
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-      motes = createMotes(width, height, hues);
-      draw(0, true);
-    }
-
-    function draw(timestamp, staticFrame = false) {
-      if (!staticFrame && timestamp - lastFrame < 32) {
-        frame = window.requestAnimationFrame((time) => draw(time));
-        return;
-      }
-      lastFrame = timestamp;
+    function render(timestamp, seconds) {
+      const moving = seconds > 0;
       context.clearRect(0, 0, width, height);
-
       for (const mote of motes) {
-        const drift = staticFrame ? 0 : Math.sin(timestamp * 0.00035 + mote.phase) * 0.22;
-        const verticalDrift = staticFrame ? 0 : mote.speed * 0.45 * riseRef.current;
-        const x = mote.x + drift;
+        const x = mote.x + (moving ? Math.sin(timestamp * 0.00035 + mote.phase) * 0.22 : 0);
         const y = mote.y;
-        const gradient = context.createLinearGradient(x, y, x - mote.length * 0.6, y + mote.length);
-        gradient.addColorStop(0, `hsla(${mote.hue}, 96%, 70%, ${mote.alpha})`);
-        gradient.addColorStop(1, `hsla(${mote.hue}, 96%, 60%, 0)`);
-        context.strokeStyle = gradient;
-        context.lineWidth = mote.radius;
-        context.beginPath();
-        context.moveTo(x, y);
-        context.lineTo(x - mote.length * 0.6, y + mote.length);
-        context.stroke();
-        const glowSize = mote.radius * 2 + 24;
+        const streak = streakSprites[mote.hue];
+        const scale = mote.length / STREAK_H;
         context.globalAlpha = mote.alpha;
+        context.drawImage(streak, x - (STREAK_W + 2) * scale, y - 2 * scale, streak.width * scale, streak.height * scale);
+        const glowSize = mote.radius * 2 + 24;
         context.drawImage(glowSprites[mote.hue], x - glowSize / 2, y - glowSize / 2, glowSize, glowSize);
-        context.globalAlpha = 1;
-        if (!staticFrame) {
-          mote.y -= verticalDrift;
-          mote.x += Math.sin(timestamp * 0.00028 + mote.phase) * 0.09;
+        if (moving) {
+          mote.y -= mote.speed * 13.5 * riseRef.current * seconds;
+          mote.x += Math.sin(timestamp * 0.00028 + mote.phase) * 2.7 * seconds;
           if (mote.y < -mote.length) {
             mote.y = height + mote.length;
             mote.x = Math.random() * width;
@@ -121,20 +124,58 @@ export function EmberField({ hues = [354, 192], rise = 1 }) {
           if (mote.x > width + 20) mote.x = -10;
         }
       }
+      context.globalAlpha = 1;
+    }
 
-      if (!staticFrame && !motionQuery.matches) {
-        frame = window.requestAnimationFrame((time) => draw(time));
+    function tick(timestamp) {
+      // A long gap (the tab was in the background) must not make the sparks jump.
+      const seconds = Math.min(0.05, (timestamp - lastTime) / 1000);
+      lastTime = timestamp;
+      render(timestamp, seconds);
+      frame = window.requestAnimationFrame(tick);
+    }
+
+    function resize() {
+      const bounds = canvas.getBoundingClientRect();
+      const newWidth = bounds.width;
+      const newHeight = bounds.height;
+      if (!newWidth || !newHeight) return;
+      if (Math.abs(newWidth - width) < 1 && Math.abs(newHeight - height) < 1) return;
+      // A phone's address bar sliding in and out resizes the page all the time. The sparks keep
+      // their place on the screen instead of being scattered again.
+      const scaleX = width ? newWidth / width : 1;
+      const scaleY = height ? newHeight / height : 1;
+      width = newWidth;
+      height = newHeight;
+      pixelRatio = Math.min(window.devicePixelRatio || 1, window.innerWidth <= 900 ? 1 : 1.5);
+      canvas.width = Math.round(width * pixelRatio);
+      canvas.height = Math.round(height * pixelRatio);
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      for (const mote of motes) {
+        mote.x *= scaleX;
+        mote.y *= scaleY;
       }
+      const wanted = moteCount(width, height);
+      if (motes.length > wanted) motes.length = wanted;
+      while (motes.length < wanted) motes.push(createMote(width, height, hues));
+      if (motionQuery.matches) render(0, 0);
     }
 
     function onMotionPreferenceChange() {
       window.cancelAnimationFrame(frame);
-      if (motionQuery.matches) draw(performance.now(), true);
-      else frame = window.requestAnimationFrame((time) => draw(time));
+      if (motionQuery.matches) render(0, 0);
+      else {
+        lastTime = performance.now();
+        frame = window.requestAnimationFrame(tick);
+      }
     }
 
     resize();
-    if (!motionQuery.matches) frame = window.requestAnimationFrame((time) => draw(time));
+    if (motionQuery.matches) render(0, 0);
+    else {
+      lastTime = performance.now();
+      frame = window.requestAnimationFrame(tick);
+    }
     window.addEventListener('resize', resize);
     motionQuery.addEventListener('change', onMotionPreferenceChange);
     return () => {
@@ -478,6 +519,10 @@ function SettingsContent({ settings, onSettingsChange }) {
             previewSound(next);
           }}
         />
+      </div>
+      <div className="menu-settings-row menu-panel-item" style={{ '--i': 2 }}>
+        <span>SWIPE PAD</span>
+        <Toggle label="Swipe pad" checked={settings.swipePad} onChange={(swipePad) => onSettingsChange({ ...settings, swipePad })} />
       </div>
 
       {[

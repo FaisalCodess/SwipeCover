@@ -713,3 +713,45 @@
     transition: none;
   }
 }
+
+/* ---------- Restart, above the board ---------- */
+
+/* It sits in the row with the level and the timer. Down by the board it was pressed by accident. */
+.game-hud > .game-chip-restart {
+  align-self: center;
+}
+
+/* On a phone there is no room for the word: the icon alone is enough. */
+@media (max-width: 520px) {
+  .game-chip-restart {
+    width: 38px;
+    padding: 0;
+  }
+
+  .game-chip-restart .game-chip-text {
+    display: none;
+  }
+}
+
+/* On a touch screen the logo holds still while a level is on: its looping animation repaints on
+   every frame, and the board needs that time more. */
+@media (pointer: coarse) {
+  .shared-brand.to-game *,
+  .shared-brand.to-game *::after {
+    animation-play-state: paused;
+  }
+}
+
+/* A backdrop blur has to be recomputed every frame while the sky and sparks move behind it. Over a
+   fill this dark the blur is barely visible, so touch screens go without it. */
+@media (pointer: coarse) {
+  .game-board-frame,
+  .game-chip {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .game-chip .cut-frame-fill {
+    background: rgba(8, 26, 38, .72);
+  }
+}

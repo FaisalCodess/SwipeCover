@@ -1,0 +1,86 @@
+/* The swipe pad: a flat middle with four sloping walls, in the game's teal-on-navy glass. It uses
+   plain fills only (no blur or backdrop filter), so it costs a phone next to nothing to draw. */
+
+.swipe-pad {
+  --pad-height: clamp(130px, 22svh, 190px);
+  position: relative;
+  width: min(94vw, 480px);
+  height: var(--pad-height);
+  flex: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  transition: opacity .25s ease;
+}
+
+.swipe-pad.is-disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+.swipe-pad-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.swipe-pad-wall {
+  fill: rgba(11, 34, 46, .78);
+  stroke: rgba(200, 240, 234, .5);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  transition: fill .12s ease;
+}
+
+.swipe-pad-wall.is-lit {
+  fill: rgba(60, 200, 186, .5);
+}
+
+.swipe-pad-floor {
+  fill: rgba(7, 20, 30, .92);
+  stroke: rgba(200, 240, 234, .65);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.swipe-pad-arrow {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  color: rgba(200, 240, 234, .72);
+  pointer-events: none;
+  transition: color .12s ease, transform .12s ease;
+}
+
+.swipe-pad-arrow.is-up { top: 9%; left: 50%; transform: translateX(-50%); }
+.swipe-pad-arrow.is-down { bottom: 9%; left: 50%; transform: translateX(-50%); }
+.swipe-pad-arrow.is-left { top: 50%; left: 6%; transform: translateY(-50%); }
+.swipe-pad-arrow.is-right { top: 50%; right: 6%; transform: translateY(-50%); }
+
+.swipe-pad-arrow.is-lit {
+  color: #fff;
+  filter: drop-shadow(0 0 6px rgba(78, 243, 208, .9));
+}
+
+.swipe-pad-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  color: rgba(174, 198, 204, .55);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .3em;
+  pointer-events: none;
+  transform: translate(-48%, -50%);
+}
+
+/* With the pad on screen the board gives up some height to it. */
+.game-view.has-pad .game-hud,
+.game-view.has-pad .game-statusbar,
+.game-view.has-pad .game-board-frame {
+  width: min(94vw, calc((100svh - 245px - clamp(130px, 22svh, 190px) - 12px) * var(--board-ratio, 1) + 40px), 1040px);
+}
