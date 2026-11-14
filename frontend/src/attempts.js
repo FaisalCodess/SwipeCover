@@ -76,7 +76,8 @@ export function saveRoute(day, level, route) {
 export function clearAttempt(day, level) {
   const all = readAll();
   if (!all[day]?.[level]) return;
-  const { [level]: removed, ...rest } = all[day];
+  const rest = { ...all[day] };
+  delete rest[level];
   all[day] = rest;
   writeAll(all);
 }

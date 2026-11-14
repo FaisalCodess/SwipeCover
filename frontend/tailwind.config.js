@@ -12,19 +12,10 @@ export default {
         display: ['"Space Grotesk"', '"DM Sans"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       colors: {
-        ink: '#0b0f14',
         mint: '#7ce8b9',
-        // Theme-aware tokens, defined in index.css and swapped by `.light-theme`.
-        fg: token('fg'),
-        soft: token('fg-soft'),
+        // Colour tokens, defined in index.css.
         muted: token('fg-muted'),
-        faint: token('fg-faint'),
         line: token('line'),
-        accent: token('accent'),
-        warn: token('warn'),
-      },
-      boxShadow: {
-        glow: '0 0 36px rgba(124, 232, 185, 0.13)',
       },
     },
   },

@@ -303,7 +303,6 @@
 .rush-view {
   --teal: 255, 196, 140;
   --neon: 255, 150, 80;
-  --glass: rgba(26, 12, 14, .66);
 }
 
 /* The HUD is taller than a level's (a big score and clock) and has the bar under it, so the

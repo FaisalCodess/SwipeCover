@@ -58,10 +58,6 @@ class SeededRandom {
     return Math.floor(this.random() * stop);
   }
 
-  randint(low, high) {
-    return low + this.randrange(high - low + 1);
-  }
-
   weightedIndex(weights) {
     let remaining = this.random() * weights.reduce((total, weight) => total + weight, 0);
     for (let index = 0; index < weights.length; index += 1) {

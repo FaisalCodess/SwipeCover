@@ -271,7 +271,7 @@ export class BallEngine {
     const [along, across] = stepCol !== 0 ? [this.scaleX, this.scaleY] : [this.scaleY, this.scaleX];
     along.velocity -= 5.5;
     across.velocity += 4;
-    this.splash(stepRow, stepCol, 0.35, ['#ffffff', '#ffd2c4', '#c9d6df']);
+    this.blockedBurst(stepRow, stepCol);
     this.wake();
   }
 
@@ -299,6 +299,28 @@ export class BallEngine {
     along.velocity -= 7.5 * strength;
     across.velocity += 5.5 * strength;
     this.splash(stepRow, stepCol, strength, this.palette.spark);
+  }
+
+  // A press into a wall: a burst of red sparks flies out of the ball, mostly back the way it came,
+  // with a flare around the ball and a shockwave along the wall.
+  blockedBurst(stepRow, stepCol) {
+    const { unit } = this.geometry;
+    const [ballX, ballY] = this.toPixels(this.x, this.y);
+    const [wallX, wallY] = this.toPixels(this.x + stepCol * RADIUS, this.y + stepRow * RADIUS);
+    const back = Math.atan2(-stepRow, -stepCol);
+    this.particles.spark({ x: ballX, y: ballY, life: 0.38, size: unit * 0.5, endSize: unit * 1.05, color: this.palette.spark[0], alpha: 0.5, drag: 0 });
+    for (let index = 0; index < 22; index += 1) {
+      const angle = back + random(-1, 1) * random(0.15, 1.5);
+      const speed = unit * random(2.2, 6);
+      this.particles.spark({
+        x: ballX, y: ballY, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        life: random(0.4, 0.75), size: unit * random(0.09, 0.19), color: pick(this.palette.spark), drag: 4.5, twinkle: 0.4,
+      });
+    }
+    this.particles.ring({
+      x: wallX, y: wallY, from: unit * 0.1, to: unit * 0.9, life: 0.42, width: 2,
+      color: this.palette.ring, alpha: 0.75, squash: 0.3, angle: stepCol !== 0 ? Math.PI / 2 : 0,
+    });
   }
 
   // Sparks off the wall the ball hit, and a shockwave flattened along it.

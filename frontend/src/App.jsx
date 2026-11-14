@@ -3,19 +3,14 @@ import {
   ArrowRight,
   ChevronLeft,
   Clock3,
-  Gamepad2,
-  Keyboard,
   LoaderCircle,
-  Moon,
   Pause,
   Play,
   RotateCcw,
-  Sun,
   Swords,
   Trophy,
   Volume2,
   VolumeX,
-  X,
 } from 'lucide-react';
 import MainMenu, { BoardFrame, CutFrame, keyShape, SkyAbove } from './MainMenu.jsx';
 import BackgroundMusic from './BackgroundMusic.jsx';
@@ -25,7 +20,7 @@ import SwipePad from './SwipePad.jsx';
 import { useSwipe } from './swipe.js';
 import Brand from './Brand.jsx';
 import './brand.css';
-import ResultDialog,{ PracticeStrip, ResultButton, ResultStanding } from './ResultDialog.jsx';
+import ResultDialog, { PracticeStrip, ResultButton, ResultStanding } from './ResultDialog.jsx';
 import { paintDelay, slideDuration } from './motion.js';
 import './main-menu.css';
 import './game-view.css';
@@ -33,7 +28,7 @@ import './rush.css';
 import { countDots, DIRECTION_STEPS, replayRoute, slide } from './game.js';
 import { beginAttempt, clearAttempt, getAttempt, saveRoute } from './attempts.js';
 import { sounds, startMusic, vibrate } from './audio.js';
-import { KEY_ACTIONS, KEY_BINDINGS } from './controls.js';
+import { KEY_ACTIONS } from './controls.js';
 import { getAmmanDayKey, getAmmanNextMidnight } from './dailyReset.js';
 import { generateDailyBoard, generateMatchBoard, generateRushBoard } from './generator.js';
 import {
@@ -52,7 +47,6 @@ import {
   unsentRushRuns,
 } from './rush.js';
 import { startRushPulse } from './rushAudio.js';
-import { usePresence } from './usePresence.js';
 import {
   checkSession,
   fetchDailyBoard,
@@ -82,12 +76,9 @@ const KEEP_SCORE_DAYS = 14;
 const MAX_QUEUED_MOVES = 8;
 const MAX_HISTORY = 400;
 const CELEBRATION_MS = 700;
-// Matches the `pop-out` animation in index.css.
-const POPUP_EXIT_MS = 200;
 // The swipe pad is for touch screens only: on a computer there is nothing to swipe with.
 export const TOUCH_SCREEN = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(pointer: coarse)').matches);
 const DEFAULT_SETTINGS = {
-  theme: 'dark',
   music: true,
   sfx: true,
   musicVolume: 70,
@@ -255,30 +246,6 @@ function RestartChip({ onClick, disabled }) {
   );
 }
 
-function Panel({ children, className = '' }) {
-  return (
-    <section className={`panel rounded-3xl border border-line/[0.08] shadow-2xl shadow-black/10 ${className}`}>
-      {children}
-    </section>
-  );
-}
-
-
-function IconButton({ label, onClick, children, className = '', disabled = false, autoFocus = false }) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      autoFocus={autoFocus}
-      className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-line/[0.09] bg-line/[0.035] text-soft transition hover:border-line/20 hover:bg-line/[0.08] hover:text-fg disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
-    >
-      {children}
-    </button>
-  );
-}
 
 function PrimaryButton({ children, onClick, disabled = false, className = '', autoFocus = false }) {
   return (
@@ -291,130 +258,6 @@ function PrimaryButton({ children, onClick, disabled = false, className = '', au
     >
       {children}
     </button>
-  );
-}
-
-function SecondaryButton({ children, onClick, className = '' }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-line/10 px-4 text-sm font-semibold text-soft transition hover:bg-line/5 hover:text-fg active:scale-[0.98] ${className}`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function Switch({ label, checked, onChange }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={`relative h-7 w-12 shrink-0 rounded-full transition ${checked ? 'bg-mint' : 'bg-line/20'}`}
-    >
-      <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${checked ? 'left-6' : 'left-1'}`} />
-    </button>
-  );
-}
-
-function SettingsDialog({ settings, onSettingsChange, onClose, closing }) {
-  return (
-    <div
-      className={`${closing ? 'fade-out pointer-events-none' : 'fade-in'} fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/65 p-4 backdrop-blur-sm`}
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <Panel className={`${closing ? 'pop-out' : 'pop-in'} w-full max-w-md p-6 sm:p-7`}>
-        <div role="dialog" aria-modal="true" aria-labelledby="settings-title">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent">Game paused</p>
-              <h2 id="settings-title" className="mt-2 font-display text-2xl font-bold">Settings</h2>
-            </div>
-            <IconButton label="Close settings" onClick={onClose} autoFocus><X size={18} /></IconButton>
-          </div>
-          <div className="mt-7 space-y-5">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                {settings.theme === 'dark' ? <Moon size={18} className="text-accent" /> : <Sun size={18} className="text-amber-500" />}
-                <div><p className="text-sm font-semibold">Appearance</p><p className="text-xs text-muted">Board theme</p></div>
-              </div>
-              <div className="flex rounded-xl border border-line/10 bg-black/10 p-1" role="radiogroup" aria-label="Theme">
-                {['dark', 'light'].map((theme) => (
-                  <button
-                    key={theme}
-                    type="button"
-                    role="radio"
-                    aria-checked={settings.theme === theme}
-                    onClick={() => onSettingsChange({ ...settings, theme })}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition ${settings.theme === theme ? 'bg-mint text-[#102019]' : 'text-muted hover:text-fg'}`}
-                  >
-                    {theme}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                {settings.music ? <Volume2 size={18} className="text-accent" /> : <VolumeX size={18} className="text-faint" />}
-                <div><p className="text-sm font-semibold">Music</p><p className="text-xs text-muted">Background music</p></div>
-              </div>
-              <Switch label="Music" checked={settings.music} onChange={(music) => onSettingsChange({ ...settings, music })} />
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                {settings.sfx ? <Volume2 size={18} className="text-accent" /> : <VolumeX size={18} className="text-faint" />}
-                <div><p className="text-sm font-semibold">Sound effects</p><p className="text-xs text-muted">Moves and level clears</p></div>
-              </div>
-              <Switch label="Sound effects" checked={settings.sfx} onChange={(sfx) => onSettingsChange({ ...settings, sfx })} />
-            </div>
-            {TOUCH_SCREEN && (
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <Gamepad2 size={18} className={settings.swipePad ? 'text-accent' : 'text-faint'} />
-                <div><p className="text-sm font-semibold">Swipe pad</p><p className="text-xs text-muted">On-screen pad to steer with a thumb</p></div>
-              </div>
-              <Switch label="Swipe pad" checked={settings.swipePad} onChange={(swipePad) => onSettingsChange({ ...settings, swipePad })} />
-            </div>
-            )}
-            {[
-              { key: 'musicVolume', label: 'Music volume' },
-              { key: 'sfxVolume', label: 'Sound effects volume' },
-            ].map(({ key, label }) => (
-              <label key={key} className="block">
-                <span className="flex justify-between text-sm font-semibold"><span>{label}</span><span className="text-accent">{settings[key]}%</span></span>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={settings[key]}
-                  onChange={(event) => onSettingsChange({ ...settings, [key]: Number(event.target.value) })}
-                  onPointerUp={() => key === 'sfxVolume' && settings.sfx && sounds.move(settings.sfxVolume, 3)}
-                  className="mt-3 h-1.5 w-full cursor-pointer accent-[#7ce8b9]"
-                />
-              </label>
-            ))}
-          </div>
-          <div className="mt-7 rounded-2xl border border-line/[0.07] bg-line/[0.025] p-4">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-soft"><Keyboard size={15} /> Keyboard controls</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {KEY_BINDINGS.map(({ action, label, name }) => (
-                <span key={action} className="rounded-lg border border-line/10 bg-black/10 px-2.5 py-1.5 text-xs text-muted">
-                  <kbd className="font-bold text-fg">{label}</kbd><span className="ml-1.5">{name}</span>
-                </span>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-faint">Arrow keys work too. On touch screens, swipe across the board.</p>
-          </div>
-        </div>
-      </Panel>
-    </div>
   );
 }
 
@@ -672,8 +515,6 @@ export default function App() {
   const [anim, setAnim] = useState({ id: 0, kind: 'load', slideMs: 0, fresh: null });
   const [bump, setBump] = useState(null);
   const [result, setResult] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
-  const [feedback, setFeedback] = useState('');
   const [storageError, setStorageError] = useState('');
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [musicFailed, setMusicFailed] = useState(false);
@@ -682,7 +523,6 @@ export default function App() {
   const [menuReveal, setMenuReveal] = useState(false);
   const travelRef = useRef(null);
   const stopwatch = useStopwatch();
-  const settingsDialog = usePresence(showSettings, POPUP_EXIT_MS);
 
   // Swipe Rush. `rushInfo` is today's first (ranked) run as the menu shows it; `rush` is the run
   // being played right now (a ranked one or a replay), which `run` holds the current board of.
@@ -702,7 +542,6 @@ export default function App() {
   const screenRef = useRef(screen);
   const settingsRef = useRef(settings);
   const dailyRef = useRef(daily);
-  const showSettingsRef = useRef(showSettings);
   const leaderboardRef = useRef(leaderboard);
   const moveQueue = useRef([]);
   const sliding = useRef(false);
@@ -712,7 +551,6 @@ export default function App() {
   screenRef.current = screen;
   settingsRef.current = settings;
   dailyRef.current = daily;
-  showSettingsRef.current = showSettings;
   leaderboardRef.current = leaderboard;
 
   const todaysScores = leaderboard[dayKey]?.levels || {};
@@ -827,7 +665,6 @@ export default function App() {
   }, [audioUnlocked, musicFailed, settings.music]);
 
   useEffect(() => {
-    document.body.classList.remove('light-theme');
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', '#07121c');
   }, []);
 
@@ -921,7 +758,6 @@ export default function App() {
     });
     setAnim((previous) => ({ id: previous.id + 1, kind: 'load', slideMs: 0, fresh: null }));
     setBump(null);
-    setFeedback('');
     setResult(null);
     submission.current += 1;
     setGlobalResult({ status: 'idle' });
@@ -1071,7 +907,6 @@ export default function App() {
     commitRun(nextRun);
     setAnim((previous) => ({ id: previous.id + 1, kind: 'load', slideMs: 0, fresh: null }));
     setBump(null);
-    setFeedback('');
   }, [clearPending, commitRun]);
 
   // Time is up. A ranked run is closed in the store with the boards cleared so far, and sent.
@@ -1463,7 +1298,6 @@ export default function App() {
 
       if (!next) {
         setBump((previous) => ({ id: (previous?.id ?? 0) + 1, direction }));
-        setFeedback('BLOCKED');
         sfx('blocked');
         vibrate(12);
         continue;
@@ -1489,7 +1323,6 @@ export default function App() {
       };
       commitRun(updated);
       setAnim((previous) => ({ id: previous.id + 1, kind: 'move', direction, slideMs, fresh }));
-      setFeedback('');
       sfx('move', distance);
 
       if (updated.remaining === 0) {
@@ -1525,7 +1358,6 @@ export default function App() {
     commitRun({ ...runRef.current, board, player, route, moves: route.length, history, remaining: countDots(board) });
     setAnim((previous) => ({ id: previous.id + 1, kind, slideMs: prefersReducedMotion() ? 0 : slideMs, fresh: null }));
     setBump(null);
-    setFeedback('');
   }, [clearPending, commitRun]);
 
   const restartLevel = useCallback(() => {
@@ -1551,21 +1383,10 @@ export default function App() {
     changePhase('playing');
   }, [changePhase]);
 
-  const openSettings = useCallback(() => {
-    pauseGame('settings');
-    setShowSettings(true);
-  }, [pauseGame]);
-
-  const closeSettings = useCallback(() => {
-    setShowSettings(false);
-    if (pauseReason.current === 'settings') resumeGame();
-  }, [resumeGame]);
-
   // Leaving a level never stops its clock: a first run keeps counting while the player is in the
   // menu, and coming back to it picks the board and the clock up where they were.
   const returnHome = useCallback(() => {
     clearPending();
-    setShowSettings(false);
     // Leaving the cave puts the Swipe Rush in play away. A ranked one keeps its place in the
     // store and its deadline keeps counting; a replay is simply dropped.
     if (screenRef.current === 'rush') {
@@ -1614,10 +1435,6 @@ export default function App() {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
       const key = event.key.toLowerCase();
-      if (showSettingsRef.current) {
-        if (key === 'escape') closeSettings();
-        return;
-      }
       if (screenRef.current !== 'game' && screenRef.current !== 'rush') return;
 
       const action = KEY_ACTIONS[key];
@@ -1642,7 +1459,7 @@ export default function App() {
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [closeSettings, pauseGame, requestMove, restartLevel, resumeGame]);
+  }, [pauseGame, requestMove, restartLevel, resumeGame]);
 
   // ---- Swipe Rush: the deadline, the pressure and the music ----
 
@@ -1785,7 +1602,6 @@ export default function App() {
 
             <div className="game-statusbar">
               <span className="game-status-dots"><i /> {run.remaining} {run.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
-              <span role="status" aria-live="polite" className="game-status-feedback">{feedback}</span>
               <span className="tabular-nums shrink-0 whitespace-nowrap">{run.moves} {run.moves === 1 ? 'MOVE' : 'MOVES'}</span>
             </div>
 
@@ -1872,7 +1688,6 @@ export default function App() {
 
             <div className="game-statusbar">
               <span className="game-status-dots"><i /> {rushRun.remaining} {rushRun.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
-              <span role="status" aria-live="polite" className="game-status-feedback">{feedback}</span>
               <span className="tabular-nums shrink-0 whitespace-nowrap">{rushRun.moves} {rushRun.moves === 1 ? 'MOVE' : 'MOVES'}</span>
             </div>
 
@@ -1962,10 +1777,6 @@ export default function App() {
 
       {showAuth && <AuthDialog reason={showAuth.reason} onClose={closeAuth} onSuccess={handleLoggedIn} onLegal={setLegal} />}
       {legal && <LegalDialog initial={legal} onClose={() => setLegal(null)} />}
-
-      {settingsDialog.mounted && (
-        <SettingsDialog settings={settings} onSettingsChange={changeSettings} onClose={closeSettings} closing={settingsDialog.closing} />
-      )}
     </main>
   );
 }

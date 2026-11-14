@@ -58,9 +58,6 @@ class SeededRandom:
     def randrange(self, stop: int) -> int:
         return int(self.random() * stop)
 
-    def randint(self, low: int, high: int) -> int:
-        return low + self.randrange(high - low + 1)
-
     def weighted_index(self, weights: list[int]) -> int:
         remaining = self.random() * sum(weights)
         for index, weight in enumerate(weights):

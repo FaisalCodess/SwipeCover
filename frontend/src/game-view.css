@@ -5,7 +5,6 @@
   flex-direction: column;
   --teal: 145, 238, 219;
   --neon: 103, 220, 213;
-  --glass: rgba(9, 22, 30, .66);
 }
 
 .game-topbar,
@@ -323,9 +322,6 @@
 }
 
 .game-statusbar {
-  /* A fixed height: the message in the middle must never make the row taller, because the game is
-     centred on the screen and the board would lift while the message shows. */
-  height: 18px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -352,16 +348,6 @@
   box-shadow: 0 0 10px rgba(var(--neon), .8);
 }
 
-.game-status-feedback {
-  min-width: 0;
-  flex: 1;
-  text-align: center;
-  line-height: 18px;
-  overflow: hidden;
-  color: #ffd27a;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* ---------- Board ---------- */
 

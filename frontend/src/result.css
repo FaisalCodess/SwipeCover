@@ -223,11 +223,6 @@
 
 .result-join .result-kicker { text-shadow: none; font-size: 10px; }
 
-.result-join-row {
-  display: flex;
-  gap: 8px;
-}
-
 .result-input {
   min-width: 0;
   flex: 1;

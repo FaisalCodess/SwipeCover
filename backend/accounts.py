@@ -20,7 +20,6 @@ SESSION_SECONDS = 30 * 24 * 60 * 60
 RESET_SECONDS = 15 * 60
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
-START_RATING = 1000
 RATING_K = 32
 EMAIL_PATTERN = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[^@\s]{2,}$")
 SCRYPT = {"n": 2**14, "r": 8, "p": 1, "maxmem": 64 * 1024 * 1024}

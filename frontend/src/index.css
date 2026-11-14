@@ -4,12 +4,9 @@
 
 :root {
   --fg: 237 244 240;
-  --fg-soft: 203 213 225;
   --fg-muted: 148 163 184;
-  --fg-faint: 100 116 139;
   --line: 255 255 255;
   --accent: 124 232 185;
-  --warn: 252 211 77;
   --page: #0b0f14;
   --page-glow: rgba(62, 101, 88, 0.19);
   --panel: rgba(17, 23, 29, 0.85);
@@ -22,20 +19,6 @@
   background: var(--page);
   font-optical-sizing: auto;
   color-scheme: dark;
-}
-
-.light-theme {
-  --fg: 23 36 31;
-  --fg-soft: 45 62 55;
-  --fg-muted: 84 101 94;
-  --fg-faint: 112 128 121;
-  --line: 20 44 34;
-  --accent: 4 138 96;
-  --warn: 180 83 9;
-  --page: #edf3ef;
-  --page-glow: rgba(117, 204, 166, 0.23);
-  --panel: rgba(255, 255, 255, 0.82);
-  color-scheme: light;
 }
 
 * {
@@ -144,60 +127,6 @@ input:focus-visible,
   box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.25), 0 0 8px rgba(9, 14, 19, 0.5);
 }
 
-.light-theme .board-wall-cell {
-  border-color: rgba(12, 23, 19, 0.35);
-  background: linear-gradient(145deg, #46534f, #1e2925);
-}
-
-.light-theme .board-wall-face {
-  border-color: rgba(255, 255, 255, 0.3);
-  background:
-    linear-gradient(90deg, transparent 49%, rgba(13, 25, 20, 0.78) 49% 52%, transparent 52%),
-    linear-gradient(0deg, transparent 48%, rgba(13, 25, 20, 0.78) 48% 52%, transparent 52%),
-    linear-gradient(145deg, #9ca7a1 0%, #68756f 48%, #46534d 100%);
-}
-
-.board-dot {
-  width: 27%;
-  height: 27%;
-  border-radius: 9999px;
-  background: rgba(124, 232, 185, 0.72);
-  box-shadow: 0 0 12px rgba(124, 232, 185, 0.25);
-}
-
-.light-theme .board-dot {
-  background: rgba(5, 150, 105, 0.7);
-  box-shadow: none;
-}
-
-.board-trail {
-  width: 25%;
-  height: 25%;
-  border-radius: 9999px;
-  background: rgba(251, 113, 133, 0.8);
-}
-
-/* A freshly covered dot morphs from a green dot into a trail mark as the ball passes. */
-.board-trail.is-fresh {
-  animation: trail-cover 0.32s cubic-bezier(0.3, 0.7, 0.4, 1) both;
-}
-
-@keyframes trail-cover {
-  0% { transform: scale(1.08); background: rgba(124, 232, 185, 0.72); }
-  35% { transform: scale(1.55); background: rgba(255, 196, 204, 0.95); }
-  100% { transform: scale(1); background: rgba(251, 113, 133, 0.8); }
-}
-
-.board-won .board-trail {
-  animation: trail-celebrate 0.9s ease-out both;
-  animation-delay: calc(var(--wave) * 28ms);
-}
-
-@keyframes trail-celebrate {
-  0%, 100% { transform: scale(1); }
-  40% { transform: scale(1.9); background: rgba(124, 232, 185, 0.95); box-shadow: 0 0 14px rgba(124, 232, 185, 0.7); }
-}
-
 /* One square in size. --x and --y are its column and row, with fractions while it moves:
    ballEngine.js writes them every frame. */
 .board-player {
@@ -264,16 +193,8 @@ input:focus-visible,
   animation: fade-in 0.22s ease-out both;
 }
 
-.fade-out {
-  animation: fade-out 0.2s ease-in both;
-}
-
 .pop-in {
   animation: pop-in 0.34s cubic-bezier(0.2, 0.8, 0.25, 1.05) both;
-}
-
-.pop-out {
-  animation: pop-out 0.2s cubic-bezier(0.5, 0, 0.75, 0) both;
 }
 
 @keyframes fade-in {
@@ -298,11 +219,7 @@ input:focus-visible,
 
 @media (prefers-reduced-motion: reduce) {
   .board-fx { display: none; }
-  .board-trail.is-fresh,
-  .board-won .board-trail,
   .board-player-ball,
   .pop-in,
-  .pop-out,
-  .fade-in,
-  .fade-out { animation: none; }
+  .fade-in { animation: none; }
 }
