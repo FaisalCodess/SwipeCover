@@ -21,7 +21,9 @@ const VOLUME_CURVE = 1.5;
 // the cave sounds like a riser, and leaving it eases back to the original.
 // To tune the feel, change these numbers (1 = original speed).
 const RATE_BY_INTENSITY = [1, 1.1, 1.17];
-const RATE_STEP = 0.004; // per 50 ms
+const RATE_TICK_MS = 120;
+const RATE_STEP = 0.0085; // per tick: about a second to the new speed
+const BOOST_STEP = 0.02;
 const RUSH_VOLUME_BOOST = 1.25;
 
 // Slider (0-100) -> audio element volume (0-MUSIC_MAX_VOLUME).
@@ -44,35 +46,47 @@ export default function BackgroundMusic({ unlocked, playing, volume, intensity =
   const fadeRef = useRef(fade);
   const audioRef = useRef(null);
 
-  const level = Math.min(1, musicVolume(volume) * fadeGain(fade) * (intensity > 0 ? RUSH_VOLUME_BOOST : 1));
+  const baseLevel = musicVolume(volume) * fadeGain(fade);
+  // The Rush volume boost glides in with the speed instead of jumping, which would click.
+  const boostRef = useRef(1);
+  const baseRef = useRef(baseLevel);
+  baseRef.current = baseLevel;
+  const applyVolume = () => {
+    const audio = audioRef.current;
+    if (audio) audio.volume = Math.min(1, baseRef.current * boostRef.current);
+  };
 
+  useEffect(applyVolume, [baseLevel, unlocked]);
+
+  // The pitch follows the speed from the start and never switches mode. Flipping `preservesPitch`
+  // while the track plays makes the browser rebuild its audio stretcher, and phones glitch when
+  // it does. At normal speed this setting changes nothing you can hear.
   useEffect(() => {
     const audio = audioRef.current;
-    if (audio) audio.volume = level;
-  }, [level, unlocked]);
+    if (!audio) return;
+    audio.preservesPitch = false;
+    audio.mozPreservesPitch = false;
+    audio.webkitPreservesPitch = false;
+  }, [unlocked]);
 
-  // Glides the playback speed to where this intensity wants it.
+  // Glides the playback speed (and the volume boost) to where this intensity wants it, in few,
+  // small steps: every change of speed costs a phone a little work, so fewer is smoother.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return undefined;
     const target = RATE_BY_INTENSITY[Math.min(intensity, RATE_BY_INTENSITY.length - 1)];
-    const keepPitch = (keep) => {
-      audio.preservesPitch = keep;
-      audio.mozPreservesPitch = keep;
-      audio.webkitPreservesPitch = keep;
-    };
-    if (target > 1) keepPitch(false);
+    const boostTarget = intensity > 0 ? RUSH_VOLUME_BOOST : 1;
     const timer = window.setInterval(() => {
       const gap = target - audio.playbackRate;
-      if (Math.abs(gap) <= RATE_STEP) {
-        audio.playbackRate = target;
-        if (target === 1) keepPitch(true);
-        window.clearInterval(timer);
-        return;
-      }
-      audio.playbackRate += Math.sign(gap) * RATE_STEP;
-    }, 50);
+      const boostGap = boostTarget - boostRef.current;
+      if (Math.abs(gap) <= RATE_STEP) audio.playbackRate = target;
+      else audio.playbackRate += Math.sign(gap) * RATE_STEP;
+      boostRef.current = Math.abs(boostGap) <= BOOST_STEP ? boostTarget : boostRef.current + Math.sign(boostGap) * BOOST_STEP;
+      applyVolume();
+      if (audio.playbackRate === target && boostRef.current === boostTarget) window.clearInterval(timer);
+    }, RATE_TICK_MS);
     return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intensity, unlocked]);
 
   useEffect(() => {

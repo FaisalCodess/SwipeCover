@@ -942,6 +942,9 @@ function LevelOrbs({ cleared, firstRuns, disabled, onPlay, onRefuse }) {
   );
 }
 
+// On a phone: the lowest point of the logo and the account button under it, where the orbs may begin.
+const PHONE_HEADER_BOTTOM = 148;
+
 const PANEL_TITLES = { settings: 'Settings', leaderboard: 'Global Leaderboard' };
 
 // The line under SWIPE RUSH: what pressing it will do today.
@@ -1039,6 +1042,8 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
 
   const layoutRef = useRef(null);
   const navRef = useRef(null);
+  const sectionRef = useRef(null);
+  const menuRef = useRef(null);
   const panelRef = useRef(null);
   const upperLineRef = useRef(null);
   const lowerLineRef = useRef(null);
@@ -1050,6 +1055,42 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
   const panelButtonRef = panel === 'leaderboard' ? leaderboardButtonRef : settingsButtonRef;
 
   useEffect(() => () => window.clearTimeout(panelTimer.current), []);
+
+  // On a phone the menu is a column pinned to the bottom, and the level orbs fill the free space
+  // between the logo and the menu. This measures that space, so the ring is sized to fit it and
+  // never turns behind a menu button.
+  useLayoutEffect(() => {
+    const root = menuRef.current;
+    const section = sectionRef.current;
+    if (!root || !section) return undefined;
+    const phone = window.matchMedia('(max-width: 760px)');
+    function fit() {
+      if (!phone.matches) {
+        root.style.removeProperty('--stage-y');
+        root.style.removeProperty('--orbit-fit');
+        root.removeAttribute('data-tight');
+        return;
+      }
+      const top = PHONE_HEADER_BOTTOM;
+      const bottom = section.getBoundingClientRect().top - 6;
+      const room = Math.max(bottom - top, 0);
+      const radius = Math.min(Math.max((room - 56) / 2, 38), Math.min(96, window.innerWidth * 0.22));
+      root.style.setProperty('--stage-y', `${Math.round(top + room / 2)}px`);
+      root.style.setProperty('--orbit-fit', `${Math.round(radius)}px`);
+      // A ring this small has no room for the words in its middle.
+      root.toggleAttribute('data-tight', radius < 56);
+    }
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(section);
+    window.addEventListener('resize', fit);
+    phone.addEventListener('change', fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', fit);
+      phone.removeEventListener('change', fit);
+    };
+  }, []);
 
   function closePanel({ restoreFocus = false } = {}) {
     if (!panel || panelClosing) return;
@@ -1202,12 +1243,12 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
   }
 
   return (
-    <section className={`duel-menu ${openPanel ? 'has-panel-open' : ''} ${leaving ? 'is-leaving' : ''}`} aria-label="Swipe Cover main menu">
+    <section ref={menuRef} className={`duel-menu ${openPanel ? 'has-panel-open' : ''} ${leaving ? 'is-leaving' : ''}`} aria-label="Swipe Cover main menu">
       <div className="menu-grain" aria-hidden="true" />
       <AccountChip player={player} onLogin={onLogin} onLogout={onLogout} onRename={onRename} onDelete={onDelete} />
 
       <div className="menu-layout" ref={layoutRef}>
-        <section className="menu-navigation" aria-label="Main menu">
+        <section className="menu-navigation" aria-label="Main menu" ref={sectionRef}>
           <div className="menu-orbit menu-orbit-one" aria-hidden="true" />
           <div className="menu-orbit menu-orbit-two" aria-hidden="true" />
           <nav ref={navRef}>

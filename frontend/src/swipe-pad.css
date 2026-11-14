@@ -12,10 +12,10 @@
 }
 
 .swipe-pad {
-  --pad-height: clamp(96px, 15svh, 128px);
+  --pad-size: clamp(112px, 17svh, 148px);
   position: relative;
-  width: min(72vw, 280px);
-  height: var(--pad-height);
+  width: var(--pad-size);
+  height: var(--pad-size);
   flex: none;
   touch-action: none;
   user-select: none;
@@ -65,10 +65,10 @@
   transition: color .12s ease, transform .12s ease;
 }
 
-.swipe-pad-arrow.is-up { top: 9%; left: 50%; transform: translateX(-50%); }
-.swipe-pad-arrow.is-down { bottom: 9%; left: 50%; transform: translateX(-50%); }
-.swipe-pad-arrow.is-left { top: 50%; left: 6%; transform: translateY(-50%); }
-.swipe-pad-arrow.is-right { top: 50%; right: 6%; transform: translateY(-50%); }
+.swipe-pad-arrow.is-up { top: 8%; left: 50%; transform: translateX(-50%); }
+.swipe-pad-arrow.is-down { bottom: 8%; left: 50%; transform: translateX(-50%); }
+.swipe-pad-arrow.is-left { top: 50%; left: 5%; transform: translateY(-50%); }
+.swipe-pad-arrow.is-right { top: 50%; right: 5%; transform: translateY(-50%); }
 
 .swipe-pad-arrow.is-lit {
   color: #fff;
@@ -81,9 +81,9 @@
   left: 50%;
   color: rgba(var(--teal), .5);
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 600;
-  letter-spacing: .3em;
+  letter-spacing: .18em;
   pointer-events: none;
   transform: translate(-48%, -50%);
 }
@@ -92,5 +92,5 @@
 .game-view.has-pad .game-hud,
 .game-view.has-pad .game-statusbar,
 .game-view.has-pad .game-board-frame {
-  width: min(94vw, calc((100svh - 245px - clamp(96px, 15svh, 128px) - 12px) * var(--board-ratio, 1) + 40px), 1040px);
+  width: min(94vw, calc((100svh - 245px - clamp(112px, 17svh, 148px) - 12px) * var(--board-ratio, 1) + 40px), 1040px);
 }

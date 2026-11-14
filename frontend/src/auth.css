@@ -262,9 +262,17 @@
 }
 
 @media (max-width: 760px) {
+  /* Under the logo, never beside it: the logo sits in a layer above the menu, so a wide button
+     or its dropdown on the same row would slide under it. */
   .menu-account {
-    top: 18px;
-    right: 14px;
+    top: 102px;
+    right: auto;
+    left: clamp(25px, 7.7vw, 122px);
+  }
+
+  .menu-account-menu {
+    right: auto;
+    left: 0;
   }
 
   .menu-account-btn {

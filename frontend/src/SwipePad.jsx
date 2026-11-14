@@ -5,11 +5,11 @@ import { useSwipe } from './swipe.js';
 import './swipe-pad.css';
 
 // The pad is drawn like a small room seen from the front: a flat centre with four sloping
-// walls (up, left, right, down) around it. Coordinates are in a 320 x 190 box that stretches to
-// whatever size the pad has.
-const WIDTH = 320;
-const HEIGHT = 190;
-const CENTER = { left: 109, right: 211, top: 63, bottom: 127 };
+// walls (up, left, right, down) around it. The pad is a square; coordinates are in a 240 x 240 box
+// that scales to whatever size the pad has.
+const WIDTH = 240;
+const HEIGHT = 240;
+const CENTER = { left: 84, right: 156, top: 84, bottom: 156 };
 
 // The outer corners are cut, like the game's other frames.
 const CUT = 14;
@@ -93,7 +93,7 @@ export default function SwipePad({ onMove, disabled }) {
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
     >
-      <svg className="swipe-pad-art" viewBox={`-1 -1 ${WIDTH + 2} ${HEIGHT + 2}`} preserveAspectRatio="none" aria-hidden="true">
+      <svg className="swipe-pad-art" viewBox={`-1 -1 ${WIDTH + 2} ${HEIGHT + 2}`} aria-hidden="true">
         {Object.entries(WEDGES).map(([direction, points]) => (
           <polygon key={direction} points={points} className={`swipe-pad-wall ${lit === direction ? 'is-lit' : ''}`} />
         ))}
@@ -107,7 +107,7 @@ export default function SwipePad({ onMove, disabled }) {
       </svg>
       {Object.entries(ARROWS).map(([direction, Arrow]) => (
         <span key={direction} className={`swipe-pad-arrow is-${direction} ${lit === direction ? 'is-lit' : ''}`} aria-hidden="true">
-          <Arrow size={22} strokeWidth={1.8} />
+          <Arrow size={20} strokeWidth={1.8} />
         </span>
       ))}
       <span className="swipe-pad-hint" aria-hidden="true">SWIPE</span>
