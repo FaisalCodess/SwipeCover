@@ -947,6 +947,53 @@ function LevelOrbs({ cleared, firstRuns, disabled, onPlay, onRefuse }) {
 // On a phone: how far up the screen the level ring may reach (it passes behind the logo's right side).
 const PHONE_RING_TOP = 72;
 
+// The day streak: a flame that burns hotter the longer the streak (ember, then gold, then the game's
+// own teal at a month), a row of seven pips for the week (a streak of 10 lights three of the next
+// week), and a pulsing pip for today while today's run is still to play.
+const flameTier = (streak) => (streak >= 30 ? 3 : streak >= 7 ? 2 : streak >= 3 ? 1 : 0);
+
+function streakShape(width, height) {
+  const right = width - HALF;
+  const bottom = height - HALF;
+  return [[HALF, 12], [12, HALF], [right - 22, HALF], [right, 22], [right, bottom - 12], [right - 12, bottom], [24, bottom], [HALF, bottom - 24]];
+}
+
+function StreakChip({ streak, playedToday, onOpen }) {
+  const lit = ((streak - 1) % 7) + 1;
+  return (
+    <button
+      type="button"
+      className="menu-streak"
+      data-tier={flameTier(streak)}
+      onClick={onOpen}
+      aria-label={`${streak} day streak${playedToday ? '' : ', play today to keep it'}. Open the streak leaderboard`}
+    >
+      <CutFrame shape={streakShape} />
+      <svg className="menu-streak-flame" viewBox="0 0 32 40" aria-hidden="true">
+        <defs>
+          <linearGradient id="streak-outer" x1="0" x2="0" y1="1" y2="0">
+            <stop offset="0" stopColor="var(--flame-low)" />
+            <stop offset="1" stopColor="var(--flame-high)" />
+          </linearGradient>
+        </defs>
+        <path className="flame-outer" fill="url(#streak-outer)" d="M16 1c1.5 6 9 9.500 9 18.500A9 9 0 0 1 7 19.500c0-3 1.500-5 3.200-6.800.4 2.600 1.600 3.800 3.300 4C12 11.200 13.500 5.500 16 1z" />
+        <path className="flame-inner" d="M16 17c.8 3 4.500 4.600 4.500 8.600a4.500 4.500 0 0 1-9 0c0-1.800.900-3 2-4 .3 1.200.9 1.700 1.700 1.800C14.800 21 15 19 16 17z" />
+      </svg>
+      <span className="menu-streak-count">
+        <strong>{streak}</strong>
+        <small>DAY STREAK</small>
+      </span>
+      <ArrowUpRight className="menu-streak-open" size={14} strokeWidth={1.6} aria-hidden="true" />
+      <span className="menu-streak-pips" aria-hidden="true">
+        {Array.from({ length: 7 }, (_, index) => (
+          <i key={index} className={index < lit ? 'is-lit' : !playedToday && index === lit ? 'is-today' : ''} />
+        ))}
+      </span>
+      <span className="menu-streak-note">{playedToday ? 'KEPT FOR TODAY' : 'PLAY TODAY TO KEEP IT'}</span>
+    </button>
+  );
+}
+
 const PANEL_TITLES = { settings: 'Settings', leaderboard: 'Global Leaderboard' };
 
 // The line under SWIPE RUSH: what pressing it will do today.
@@ -1011,7 +1058,7 @@ function AccountChip({ player, onLogin, onLogout, onRename, onDelete }) {
   );
 }
 
-export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, onRename, onDelete, onLegal, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], rush = { status: 'idle' }, streak = 0, challenge = null, onDismissChallenge, status, error }) {
+export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, onRename, onDelete, onLegal, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], rush = { status: 'idle' }, streak = 0, streakToday = false, challenge = null, onDismissChallenge, status, error }) {
   // Which panel is showing ('settings' | 'leaderboard'), and whether it is folding away.
   const [panel, setPanel] = useState(null);
   const [panelClosing, setPanelClosing] = useState(false);
@@ -1301,19 +1348,14 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
             })}
           </nav>
           {streak > 0 && (
-            <button
-              type="button"
-              className="menu-streak"
-              onClick={() => {
+            <StreakChip
+              streak={streak}
+              playedToday={streakToday}
+              onOpen={() => {
                 setBoardStart('streak');
                 if (panel !== 'leaderboard' || panelClosing) togglePanel('leaderboard');
               }}
-              aria-label={`${streak} day streak. Open the streak leaderboard`}
-            >
-              <Flame size={15} strokeWidth={1.8} aria-hidden="true" />
-              <strong>{streak}</strong> DAY STREAK
-              <ArrowUpRight size={13} strokeWidth={1.6} aria-hidden="true" />
-            </button>
+            />
           )}
           {challenge && !challengeDone && (
             <div className="menu-challenge">

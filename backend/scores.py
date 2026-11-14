@@ -159,12 +159,13 @@ class ScoreStore:
             total = self._db.execute("SELECT COUNT(*) FROM rush_scores WHERE day = ?", (day,)).fetchone()[0]
             return {"entries": entries, "you": you, "total": total}
 
-    def top_streaks(self, today: str, player_id: str | None = None) -> dict:
+    def top_streaks(self, today: str, player_id: str | None = None, since: str = "") -> dict:
         """The longest running streaks of days with a first run (a daily level or Swipe Rush) done.
 
         A streak is alive if the player's latest day is today or yesterday. Ties go to whoever has
         played more days in all. Only the first STREAK_LIMIT players are listed; the caller's own
-        place is added when they are further down.
+        place is added when they are further down. Days before `since` (a YYYY-MM-DD date) do not
+        count, which is how everyone's streak was started again from zero.
         """
         with self._lock:
             rows = self._db.execute(
@@ -172,7 +173,8 @@ class ScoreStore:
             ).fetchall()
         players: dict[str, tuple[str, set[str]]] = {}
         for row_player, name, day in rows:
-            players.setdefault(row_player, (name, set()))[1].add(day)
+            if day >= since:
+                players.setdefault(row_player, (name, set()))[1].add(day)
 
         end = date.fromisoformat(today)
         standings = []

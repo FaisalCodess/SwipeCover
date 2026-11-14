@@ -1676,6 +1676,7 @@ export default function App() {
           completedLevels={completedLevels}
           rush={rushInfo}
           streak={streak}
+          streakToday={streakState.last === dayKey}
           challenge={challenge?.day === dayKey ? challenge : null}
           onDismissChallenge={() => { clearChallenge(); setChallenge(null); }}
           status={daily.status}

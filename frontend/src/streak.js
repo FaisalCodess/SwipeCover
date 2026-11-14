@@ -2,6 +2,9 @@
 // ranked Swipe Rush is done; miss a whole day and the streak starts again. Kept on this device.
 
 const KEY = 'swipe-cover-streak-v1';
+// Streaks count from this day on: everyone started again from zero. Keep in step with STREAK_START
+// in backend/main.py.
+const STREAK_START = '2026-11-15';
 
 // Day keys are Amman dates (YYYY-MM-DD); this turns one into a whole number of days.
 const dayNumber = (key) => {
@@ -12,7 +15,7 @@ const dayNumber = (key) => {
 export function readStreak() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (saved && typeof saved.last === 'string' && Number.isInteger(saved.count)) return { last: saved.last, count: saved.count };
+    if (saved && typeof saved.last === 'string' && Number.isInteger(saved.count) && saved.last >= STREAK_START) return { last: saved.last, count: saved.count };
   } catch {
     // Unreadable: start again.
   }
@@ -21,7 +24,7 @@ export function readStreak() {
 
 // Records that `day` was played and returns the new state.
 export function markPlayed(state, day) {
-  if (state.last === day) return state;
+  if (state.last === day || day < STREAK_START) return state;
   const continues = state.last && dayNumber(day) - dayNumber(state.last) === 1;
   const next = { last: day, count: continues ? state.count + 1 : 1 };
   try {
@@ -43,7 +46,7 @@ export function currentStreak(state, today) {
 // days with a first run. This works the streak out from them, and keeps the better of that and
 // what was saved.
 export function backfillStreak(state, days) {
-  const sorted = [...new Set(days)].sort();
+  const sorted = [...new Set(days)].filter((day) => day >= STREAK_START).sort();
   if (!sorted.length) return state;
   const last = sorted[sorted.length - 1];
   let count = 1;

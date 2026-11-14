@@ -566,11 +566,16 @@ def leaderboard(
     return {"day": day, "level": level, **store.top(day, level, user["id"] if user else None)}
 
 
+# Streaks count from this day on: everyone started again from zero. Keep in step with STREAK_START
+# in frontend/src/streak.js.
+STREAK_START = "2026-11-15"
+
+
 @app.get("/api/streak/leaderboard")
 def streak_leaderboard(response: Response, user: dict | None = Depends(optional_user)) -> dict:
     """The longest running day streaks (up to 100 players), plus the caller's own place when they are outside them."""
     response.headers["Cache-Control"] = "no-store"
-    return store.top_streaks(current_day_key(), user["id"] if user else None)
+    return store.top_streaks(current_day_key(), user["id"] if user else None, STREAK_START)
 
 
 def _origin_allowed(websocket: WebSocket) -> bool:

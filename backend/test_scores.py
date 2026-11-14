@@ -151,6 +151,7 @@ def test_the_streak_leaderboard_counts_days_in_a_row(tmp_path):
 
 
 def test_the_streak_leaderboard_lists_up_to_100_and_adds_you_below(client, signup, monkeypatch):
+    monkeypatch.setattr(main, "STREAK_START", "")
     today = current_day_key()
     me = signup("Streaker Me")
     for number in range(120):
@@ -161,3 +162,22 @@ def test_the_streak_leaderboard_lists_up_to_100_and_adds_you_below(client, signu
     assert board["you"]["name"] == "Streaker Me" and board["you"]["rank"] > 100 and board["you"]["streak"] == 1
     anonymous = client.get("/api/streak/leaderboard").json()
     assert anonymous["you"] is None and len(anonymous["entries"]) == 100
+
+
+def test_streaks_only_count_from_the_start_day(tmp_path):
+    from scores import ScoreStore
+
+    store = ScoreStore(tmp_path / "since.db")
+    for day in ("2026-11-12", "2026-11-13", "2026-11-14"):
+        store.submit(day, 1, "ann", "Ann", 10000, 5)
+    assert store.top_streaks("2026-11-14")["entries"][0]["streak"] == 3
+    assert store.top_streaks("2026-11-14", since="2026-11-15") == {"entries": [], "you": None, "total": 0}
+    assert store.top_streaks("2026-11-14", since="2026-11-13")["entries"][0]["streak"] == 2
+
+
+def test_nobody_has_a_streak_before_the_start_day(client, signup, monkeypatch):
+    monkeypatch.setattr(main, "STREAK_START", "2999-01-01")
+    me = signup("Early Bird")
+    main.store.submit(current_day_key(), 1, me["user"]["id"], "Early Bird", 10000, 5)
+    board = client.get("/api/streak/leaderboard", headers=me["headers"]).json()
+    assert board == {"entries": [], "you": None, "total": 0}
