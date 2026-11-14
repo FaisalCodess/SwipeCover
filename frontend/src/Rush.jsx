@@ -185,12 +185,12 @@ export function CaveBelow({ heat = 0 }) {
 
 // ---------- The clock ----------
 
-// The countdown, written straight to the page every frame so it never re-renders the board.
+// The countdown, written straight to the page so it never re-renders the board. It checks 20
+// times a second rather than every frame (see TimerText in App.jsx).
 // With no `endsAt` yet (the camera is still falling) it shows the full time.
 export function CountdownText({ endsAt, className = '', totalMs = RUSH_MS }) {
   const ref = useRef(null);
   useEffect(() => {
-    let frame;
     let shown = '';
     const tick = () => {
       const text = formatRushClock(endsAt === null ? totalMs : endsAt - Date.now());
@@ -198,10 +198,10 @@ export function CountdownText({ endsAt, className = '', totalMs = RUSH_MS }) {
         ref.current.textContent = text;
         shown = text;
       }
-      frame = window.requestAnimationFrame(tick);
     };
     tick();
-    return () => window.cancelAnimationFrame(frame);
+    const timer = window.setInterval(tick, 50);
+    return () => window.clearInterval(timer);
   }, [endsAt, totalMs]);
   return <span ref={ref} role="timer" className={className} />;
 }
@@ -210,14 +210,14 @@ export function CountdownText({ endsAt, className = '', totalMs = RUSH_MS }) {
 function TimeBar({ endsAt, totalMs = RUSH_MS }) {
   const ref = useRef(null);
   useEffect(() => {
-    let frame;
+    // Five minutes across the screen: a few updates a second move it by less than a pixel each.
     const tick = () => {
       const left = endsAt === null ? 1 : Math.min(1, Math.max(0, (endsAt - Date.now()) / totalMs));
       if (ref.current) ref.current.style.transform = `scaleX(${left})`;
-      frame = window.requestAnimationFrame(tick);
     };
     tick();
-    return () => window.cancelAnimationFrame(frame);
+    const timer = window.setInterval(tick, 200);
+    return () => window.clearInterval(timer);
   }, [endsAt, totalMs]);
   return <div className="rush-bar" aria-hidden="true"><i ref={ref} /></div>;
 }

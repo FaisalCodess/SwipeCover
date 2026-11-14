@@ -1,10 +1,20 @@
 /* The swipe pad: a flat middle with four sloping walls, in the game's teal-on-navy glass. It uses
    plain fills only (no blur or backdrop filter), so it costs a phone next to nothing to draw. */
 
+.game-view {
+  --pad-tint: 11, 34, 46;
+  --pad-floor: 7, 20, 30;
+}
+
+.rush-view {
+  --pad-tint: 46, 26, 16;
+  --pad-floor: 24, 12, 8;
+}
+
 .swipe-pad {
-  --pad-height: clamp(130px, 22svh, 190px);
+  --pad-height: clamp(96px, 15svh, 128px);
   position: relative;
-  width: min(94vw, 480px);
+  width: min(72vw, 280px);
   height: var(--pad-height);
   flex: none;
   touch-action: none;
@@ -28,20 +38,20 @@
 }
 
 .swipe-pad-wall {
-  fill: rgba(11, 34, 46, .78);
-  stroke: rgba(200, 240, 234, .5);
+  fill: rgba(var(--pad-tint), .78);
+  stroke: rgba(var(--teal), .5);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
   transition: fill .12s ease;
 }
 
 .swipe-pad-wall.is-lit {
-  fill: rgba(60, 200, 186, .5);
+  fill: rgba(var(--teal), .42);
 }
 
 .swipe-pad-floor {
-  fill: rgba(7, 20, 30, .92);
-  stroke: rgba(200, 240, 234, .65);
+  fill: rgba(var(--pad-floor), .92);
+  stroke: rgba(var(--teal), .65);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
@@ -50,7 +60,7 @@
   position: absolute;
   display: grid;
   place-items: center;
-  color: rgba(200, 240, 234, .72);
+  color: rgba(var(--teal), .78);
   pointer-events: none;
   transition: color .12s ease, transform .12s ease;
 }
@@ -62,14 +72,14 @@
 
 .swipe-pad-arrow.is-lit {
   color: #fff;
-  filter: drop-shadow(0 0 6px rgba(78, 243, 208, .9));
+  filter: drop-shadow(0 0 6px rgba(var(--teal), .9));
 }
 
 .swipe-pad-hint {
   position: absolute;
   top: 50%;
   left: 50%;
-  color: rgba(174, 198, 204, .55);
+  color: rgba(var(--teal), .5);
   font-family: 'Space Grotesk', sans-serif;
   font-size: 9px;
   font-weight: 600;
@@ -82,5 +92,5 @@
 .game-view.has-pad .game-hud,
 .game-view.has-pad .game-statusbar,
 .game-view.has-pad .game-board-frame {
-  width: min(94vw, calc((100svh - 245px - clamp(130px, 22svh, 190px) - 12px) * var(--board-ratio, 1) + 40px), 1040px);
+  width: min(94vw, calc((100svh - 245px - clamp(96px, 15svh, 128px) - 12px) * var(--board-ratio, 1) + 40px), 1040px);
 }

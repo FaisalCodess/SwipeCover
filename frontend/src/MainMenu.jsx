@@ -59,6 +59,7 @@ function createGlowSprite(hue) {
 
 // The fading tail behind a spark, also drawn once. It runs from the top right (the spark) to the
 // bottom left, and is stretched to each spark's own length when stamped, so the angle never changes.
+const DRAW_EVERY_MS = 48;
 const STREAK_W = 19;
 const STREAK_H = 32;
 function createStreakSprite(hue) {
@@ -95,6 +96,7 @@ export function EmberField({ hues = [354, 192], rise = 1 }) {
     const streakSprites = Object.fromEntries(hues.map((hue) => [hue, createStreakSprite(hue)]));
     const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     let frame = 0;
+    let timer = 0;
     let width = 0;
     let height = 0;
     let pixelRatio = 1;
@@ -127,12 +129,19 @@ export function EmberField({ hues = [354, 192], rise = 1 }) {
       context.globalAlpha = 1;
     }
 
+    // The sparks drift a few pixels a second, so about 20 draws a second look just as smooth as 60,
+    // and every draw is a page update the phone has to composite. A timer wakes the loop, so the
+    // page is left alone in between instead of being asked for a frame it will not use.
+    function schedule() {
+      timer = window.setTimeout(() => { frame = window.requestAnimationFrame(tick); }, DRAW_EVERY_MS);
+    }
+
     function tick(timestamp) {
       // A long gap (the tab was in the background) must not make the sparks jump.
-      const seconds = Math.min(0.05, (timestamp - lastTime) / 1000);
+      const seconds = Math.min(0.1, (timestamp - lastTime) / 1000);
       lastTime = timestamp;
       render(timestamp, seconds);
-      frame = window.requestAnimationFrame(tick);
+      schedule();
     }
 
     function resize() {
@@ -161,12 +170,17 @@ export function EmberField({ hues = [354, 192], rise = 1 }) {
       if (motionQuery.matches) render(0, 0);
     }
 
-    function onMotionPreferenceChange() {
+    function stop() {
+      window.clearTimeout(timer);
       window.cancelAnimationFrame(frame);
+    }
+
+    function onMotionPreferenceChange() {
+      stop();
       if (motionQuery.matches) render(0, 0);
       else {
         lastTime = performance.now();
-        frame = window.requestAnimationFrame(tick);
+        schedule();
       }
     }
 
@@ -174,12 +188,12 @@ export function EmberField({ hues = [354, 192], rise = 1 }) {
     if (motionQuery.matches) render(0, 0);
     else {
       lastTime = performance.now();
-      frame = window.requestAnimationFrame(tick);
+      schedule();
     }
     window.addEventListener('resize', resize);
     motionQuery.addEventListener('change', onMotionPreferenceChange);
     return () => {
-      window.cancelAnimationFrame(frame);
+      stop();
       window.removeEventListener('resize', resize);
       motionQuery.removeEventListener('change', onMotionPreferenceChange);
     };

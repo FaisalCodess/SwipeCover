@@ -13,7 +13,6 @@ import {
   Sun,
   Swords,
   Trophy,
-  Undo2,
   Volume2,
   VolumeX,
   X,
@@ -214,11 +213,12 @@ function useStopwatch() {
   }, []);
 }
 
-// Writes straight to the DOM every frame so the clock never re-renders the board.
+// Writes straight to the DOM so the clock never re-renders the board. It refreshes 20 times a
+// second, not on every frame: sixty page updates a second were keeping a phone's whole rendering
+// pipeline busy for a number that is only read, and the hundredths blur at that speed anyway.
 function TimerText({ read, className = '' }) {
   const ref = useRef(null);
   useEffect(() => {
-    let frame;
     let shown = '';
     const tick = () => {
       const text = formatTime(read());
@@ -226,10 +226,10 @@ function TimerText({ read, className = '' }) {
         ref.current.textContent = text;
         shown = text;
       }
-      frame = window.requestAnimationFrame(tick);
     };
     tick();
-    return () => window.cancelAnimationFrame(frame);
+    const timer = window.setInterval(tick, 50);
+    return () => window.clearInterval(timer);
   }, [read]);
   return <span ref={ref} role="timer" className={className} />;
 }
@@ -1477,7 +1477,7 @@ export default function App() {
         ...current,
         board: next.board,
         player: next.player,
-        history: [...current.history, { board: current.board, player: current.player, route: current.route }].slice(-MAX_HISTORY),
+        history: [],
         route: [...current.route, direction],
         moves: current.route.length + 1,
         remaining: countDots(next.board),
@@ -1523,20 +1523,11 @@ export default function App() {
     setFeedback('');
   }, [clearPending, commitRun]);
 
-  const undoMove = useCallback(() => {
-    const current = runRef.current;
-    if (phaseRef.current !== 'playing' || !current?.history.length) return;
-    const previous = current.history[current.history.length - 1];
-    jumpTo(previous.board, previous.player, previous.route, current.history.slice(0, -1), 'undo', 170);
-    sfx('undo');
-  }, [jumpTo, sfx]);
-
   const restartLevel = useCallback(() => {
     const current = runRef.current;
     if (phaseRef.current !== 'playing' || !current || current.moves === 0) return;
-    // Restarting is undoable, and the clock keeps running.
-    const history = [...current.history, { board: current.board, player: current.player, route: current.route }];
-    jumpTo(current.initialBoard, current.initialPlayer, [], history, 'restart', 0);
+    // The clock keeps running through a restart.
+    jumpTo(current.initialBoard, current.initialPlayer, [], [], 'restart', 0);
     sfx('undo');
   }, [jumpTo, sfx]);
 
@@ -1640,16 +1631,13 @@ export default function App() {
         if (!event.repeat) requestMove(action);
       } else if (action === 'restart' && !event.repeat) {
         restartLevel();
-      } else if (action === 'undo') {
-        event.preventDefault();
-        undoMove();
       } else if (action === 'pause') {
         pauseGame('manual');
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [closeSettings, pauseGame, requestMove, restartLevel, resumeGame, undoMove]);
+  }, [closeSettings, pauseGame, requestMove, restartLevel, resumeGame]);
 
   // ---- Swipe Rush: the deadline, the pressure and the music ----
 
@@ -1773,7 +1761,7 @@ export default function App() {
                   })}
                 </span>
               </div>
-              <RestartChip onClick={restartLevel} disabled={!playing || run.moves === 0} />
+              {!settings.swipePad && <RestartChip onClick={restartLevel} disabled={!playing || run.moves === 0} />}
               <div className="game-timer">
                 <Clock3 size={16} strokeWidth={1.5} />
                 <TimerText read={stopwatch.read} className="game-timer-text tabular-nums" />
@@ -1797,9 +1785,8 @@ export default function App() {
             </div>
 
             <div className="game-actions">
-              <GameChip onClick={undoMove} disabled={!playing || !run.history.length}>
-                <Undo2 size={14} strokeWidth={1.6} /> UNDO
-              </GameChip>
+              {/* With the swipe pad on, Restart sits here, just above the pad. Otherwise it is in the row above the board. */}
+              {settings.swipePad && <RestartChip onClick={restartLevel} disabled={!playing || run.moves === 0} />}
               <GameChip onClick={() => pauseGame('manual')} disabled={!playing}>
                 <Pause size={14} strokeWidth={1.6} /> PAUSE
               </GameChip>
@@ -1864,7 +1851,7 @@ export default function App() {
               versus={rush.versus ? { opponent: rush.opponent, you: rush.you, them: rush.them, mode: rush.mode } : null}
               totalMs={rush.versus ? rush.totalMs : undefined}
             >
-              <RestartChip onClick={restartLevel} disabled={!playing || rushRun.moves === 0} />
+              {!settings.swipePad && <RestartChip onClick={restartLevel} disabled={!playing || rushRun.moves === 0} />}
             </RushHud>
 
             <GameBoard
@@ -1884,13 +1871,15 @@ export default function App() {
               <span className="tabular-nums">{rushRun.moves} {rushRun.moves === 1 ? 'MOVE' : 'MOVES'}</span>
             </div>
 
-            {/* No pause: the clock cannot stop. Undo and restart cost time like everything else. */}
-            <div className="game-actions">
-              <GameChip onClick={undoMove} disabled={!playing || !rushRun.history.length}>
-                <Undo2 size={14} strokeWidth={1.6} /> UNDO
-              </GameChip>
-            </div>
-            {settings.swipePad && <SwipePad onMove={requestMove} disabled={phase !== 'playing'} />}
+            {/* No pause: the clock cannot stop. Restart costs time like everything else. */}
+            {settings.swipePad && (
+              <>
+                <div className="game-actions">
+                  <RestartChip onClick={restartLevel} disabled={!playing || rushRun.moves === 0} />
+                </div>
+                <SwipePad onMove={requestMove} disabled={phase !== 'playing'} />
+              </>
+            )}
           </div>
           <RushBanner banner={banner} />
           {banner && (

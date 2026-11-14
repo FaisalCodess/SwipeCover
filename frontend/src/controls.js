@@ -6,7 +6,6 @@ export const KEY_BINDINGS = [
   { action: 'down', name: 'Down', label: 'S', keys: ['s', 'arrowdown'] },
   { action: 'right', name: 'Right', label: 'D', keys: ['d', 'arrowright'] },
   { action: 'restart', name: 'Restart', label: 'R', keys: ['r'] },
-  { action: 'undo', name: 'Undo', label: 'Z', keys: ['z', 'backspace'] },
   { action: 'pause', name: 'Pause', label: 'Esc', keys: ['escape', 'p'] },
 ];
 

@@ -1960,9 +1960,11 @@
 }
 
 @media (max-width: 760px) {
+  /* The sheet is fixed over the screen, so the menu underneath never has to move for it. (It used
+     to jump up while a panel was open and snap back down when it closed.) */
   .menu-layout:has(.menu-panel) {
     grid-template-columns: minmax(0, 1fr);
-    align-content: start;
+    align-content: center;
   }
 
   /* No room beside the menu on phones, and a panel below it was off the bottom of the screen.
@@ -2108,4 +2110,11 @@
   .menu-orb-ring.is-refused { opacity: .9; transform: none; }
   .menu-atmosphere { transition: none; }
   .has-panel-open .menu-atmosphere { transform: none; }
+}
+
+/* See the note in game-view.css: on a touch screen the sky's slow breathing stands still. */
+@media (pointer: coarse) {
+  .menu-sky-glow {
+    animation: none;
+  }
 }

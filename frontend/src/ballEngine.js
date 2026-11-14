@@ -7,6 +7,8 @@ import { DIRECTION_STEPS } from './game.js';
 import { SLIDE_EASE, UNDO_EASE, spring, springAtRest, stepSpring } from './motion.js';
 import { glowSprite, HALO, ParticleField } from './particles.js';
 
+const TOUCH_SCREEN = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(pointer: coarse)').matches);
+
 // How far the canvas reaches past the board on each side (keep in sync with .board-fx), so
 // sparks thrown off the edge are not cut off there.
 const MARGIN = 32;
@@ -114,7 +116,9 @@ export class BallEngine {
       pitchY: cellHeight + gap,
       unit: Math.min(cellWidth, cellHeight),
     };
-    this.ratio = Math.min(window.devicePixelRatio || 1, 2);
+    // Sparks are soft glows, so a phone draws them at normal pixel density: a 3x screen would
+    // make this canvas nine times the pixels for nothing anyone can see.
+    this.ratio = Math.min(window.devicePixelRatio || 1, TOUCH_SCREEN ? 1 : 2);
     this.canvasWidth = width + MARGIN * 2;
     this.canvasHeight = height + MARGIN * 2;
     const pixelWidth = Math.round(this.canvasWidth * this.ratio);

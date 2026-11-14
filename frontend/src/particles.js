@@ -2,7 +2,8 @@
 // Everything is in canvas pixels, so sparks keep flying where they were thrown even when the
 // board under them changes (a new Swipe Rush board, a resize).
 
-const MAX_PARTICLES = 600;
+// A phone draws far fewer at once: the extra sparks only pile up in the same glow.
+const MAX_PARTICLES = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches ? 240 : 600;
 const SPRITE_SIZE = 64;
 // A spark's sprite has a soft halo around its core, so it is drawn this much bigger than its size.
 export const HALO = 2.6;

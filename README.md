@@ -135,7 +135,7 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
 - Everyone gets the same endless sequence each day, in the same order, and it
   resets at midnight (Jordan time) like the daily levels. Boards start tiny
   (3-4 moves) and get bigger and trickier as the run goes on.
-- Undo (Z) and restart (R) work and cost time like everything else. There is **no
+- Restart (R) works and costs time like everything else. There is **no undo** and **no
   pause**: the clock cannot stop. In the last minute the cave heats up, and the last
   ten seconds tick.
 - Like a daily level, only your **first** Swipe Rush of the day counts. Its deadline
@@ -253,7 +253,7 @@ If the file is missing or cannot play, the game falls back to a built-in synth m
 ## Controls
 
 Swipe on the board, use the on-screen pad, or the keyboard:
-WASD / arrow keys to move, Z to undo, R to restart, Esc to pause (levels only).
+WASD / arrow keys to move, R to restart, Esc to pause (levels only).
 A swipe can turn without lifting the finger (right, then down, ...) to chain moves in one stroke.
 Pausing only covers the board; the clock keeps running. Swipe Rush cannot be paused.
 Settings and leaderboard times are stored in the browser.

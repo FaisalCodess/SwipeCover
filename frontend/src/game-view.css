@@ -723,12 +723,12 @@
 
 /* On a phone there is no room for the word: the icon alone is enough. */
 @media (max-width: 520px) {
-  .game-chip-restart {
+  .game-hud .game-chip-restart {
     width: 38px;
     padding: 0;
   }
 
-  .game-chip-restart .game-chip-text {
+  .game-hud .game-chip-restart .game-chip-text {
     display: none;
   }
 }
@@ -753,5 +753,54 @@
 
   .game-chip .cut-frame-fill {
     background: rgba(8, 26, 38, .72);
+  }
+}
+
+/* A looping animation makes the phone produce a new frame 60 times a second for as long as it runs,
+   even when it is only a 2% wobble. These three are decoration, so on a touch screen they stand
+   still and the frames are left for the ball and the board. */
+@media (pointer: coarse) {
+  .game-view .board-player-ball,
+  .game-view .sky-above-mist {
+    animation: none;
+  }
+}
+
+/* Painting squares is what the board does all the time, so on a touch screen it is kept cheap.
+   Every painted square used to carry two blurred shadows and flash with `filter: brightness`,
+   which repaints the square (and its shadows) on every frame; a long slide paints a dozen of
+   them at once and the win animation does all of them. Now there is one small glow, and the
+   flashes use only opacity and scale, which the GPU does without repainting. */
+@media (pointer: coarse) {
+  .board-tile.is-covered::before {
+    box-shadow: 0 0 9px rgba(78, 243, 208, .45);
+  }
+
+  /* The ball's trail and sparks already show where it has been, so a square just appears covered.
+     (Each flashing square needed a layer of its own, and a long slide makes a dozen of them.) */
+  .board-tile.is-covered.is-fresh {
+    animation: none;
+  }
+
+  /* Cutting the whole board out with a mask is work on every frame; the frame's own outline
+     already draws the cut corners. */
+  .game-board-frame {
+    overflow: visible;
+    clip-path: none;
+  }
+
+  /* A full-screen film grain blended over everything, at 9% strength. */
+  .menu-grain {
+    display: none;
+  }
+
+  .game-view .board-won .board-tile.is-covered {
+    animation: tile-celebrate-light .6s ease-out both;
+    animation-delay: calc(var(--wave) * 28ms);
+  }
+
+  @keyframes tile-celebrate-light {
+    0%, 100% { transform: none; }
+    40% { transform: scale(1.1); }
   }
 }
