@@ -71,6 +71,54 @@ function loadTrack(context) {
   return trackPromise;
 }
 
+// An iPhone mutes Web Audio while its ringer switch is on silent, though it still plays a media
+// element. Playing a silent clip through an element (and asking Safari for the "playback" audio
+// session) makes Web Audio audible too.
+// A real one-second clip of silence (8 kHz, 8-bit, mono), built here so it has a proper length:
+// a zero-length clip on a loop makes the browser spin.
+function makeSilentClipUrl() {
+  const rate = 8000;
+  const bytes = new Uint8Array(44 + rate).fill(128);
+  const view = new DataView(bytes.buffer);
+  const text = (offset, value) => [...value].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)));
+  text(0, 'RIFF');
+  view.setUint32(4, 36 + rate, true);
+  text(8, 'WAVEfmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  text(36, 'data');
+  view.setUint32(40, rate, true);
+  return URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+}
+
+function unmuteIOS() {
+  try {
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+  } catch {
+    // Not supported here.
+  }
+  try {
+    const url = makeSilentClipUrl();
+    const clip = new Audio(url);
+    clip.loop = true;
+    clip.setAttribute('playsinline', '');
+    clip.play().catch(() => {});
+    return { clip, url };
+  } catch {
+    return null;
+  }
+}
+
+// How long the buffer player may stay silent (context not running, or the track not decoded)
+// before the plain audio element takes over, so the music can never just be missing.
+const GIVE_UP_MS = 3500;
+const DECODE_GIVE_UP_MS = 12000;
+
 // Plays the local music file. Mounted only after the first user gesture (`unlocked`)
 // so the browser's autoplay rules allow sound. It draws nothing.
 export default function BackgroundMusic({ unlocked, playing, volume, intensity = 0, onError }) {
@@ -212,6 +260,41 @@ export default function BackgroundMusic({ unlocked, playing, volume, intensity =
       gain.gain.setTargetAtTime(level, now, VOLUME_SMOOTHING);
     }
 
+    // The plain-element player: no fades or smooth speed changes, but it plays everywhere.
+    let fallback = null;
+    let fallbackTimer = 0;
+    function useFallback(reason) {
+      if (fallback || cancelled) return;
+      console.info('Music: using the simple player.', reason);
+      window.clearInterval(timer);
+      stopSource();
+      state.buffer = null;
+      fallback = new Audio(MUSIC_URL);
+      fallback.loop = true;
+      fallback.preload = 'auto';
+      fallback.preservesPitch = false;
+      fallback.onerror = () => props.current.onError?.(new Error('The music file cannot play.'));
+      const sync = () => {
+        const { playing: wantPlay, volume: slider, intensity: wantIntensity } = props.current;
+        fallback.volume = Math.min(1, musicVolume(slider) * (wantIntensity > 0 ? RUSH_VOLUME_BOOST : 1));
+        const rate = rateFor(wantIntensity);
+        if (Math.abs(fallback.playbackRate - rate) > 0.001) fallback.playbackRate = rate;
+        if (wantPlay && fallback.paused) fallback.play().catch(() => {});
+        else if (!wantPlay && !fallback.paused) fallback.pause();
+      };
+      sync();
+      fallbackTimer = window.setInterval(sync, 120);
+    }
+
+    const silentClip = unmuteIOS();
+    const watchdog = window.setTimeout(() => {
+      if (!state.buffer) return;
+      if (props.current.playing && context.state !== 'running') useFallback('audio context is not running');
+    }, GIVE_UP_MS);
+    const decodeWatchdog = window.setTimeout(() => {
+      if (!state.buffer) useFallback('the track is taking too long to decode');
+    }, DECODE_GIVE_UP_MS);
+
     function wake() {
       if (!document.hidden && context.state !== 'running') context.resume().catch(() => {});
     }
@@ -229,15 +312,21 @@ export default function BackgroundMusic({ unlocked, playing, volume, intensity =
         tick();
         timer = window.setInterval(tick, TICK_MS);
       })
-      .catch((error) => {
-        if (!cancelled) props.current.onError?.(error);
-      });
+      .catch((error) => useFallback(error));
 
     document.addEventListener('visibilitychange', wake);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', wake);
+      window.clearTimeout(watchdog);
+      window.clearTimeout(decodeWatchdog);
+      window.clearInterval(fallbackTimer);
+      if (fallback) fallback.pause();
+      if (silentClip) {
+        silentClip.clip.pause();
+        URL.revokeObjectURL(silentClip.url);
+      }
       stopSource();
       gain.disconnect();
     };
