@@ -262,23 +262,30 @@
 }
 
 @media (max-width: 760px) {
-  /* Under the logo, never beside it: the logo sits in a layer above the menu, so a wide button
-     or its dropdown on the same row would slide under it. */
   .menu-account {
-    top: 102px;
-    right: auto;
-    left: clamp(25px, 7.7vw, 122px);
-  }
-
-  .menu-account-menu {
-    right: auto;
-    left: 0;
+    top: 18px;
+    right: 14px;
   }
 
   .menu-account-btn {
     height: 34px;
     padding: 0 12px;
     font-size: 10px;
+  }
+
+  /* Short name and a narrow dropdown, so neither reaches the logo (which sits in a layer above). */
+  .menu-account-btn .menu-account-name { max-width: 8ch; }
+  .menu-account-menu {
+    min-width: 0;
+    width: min(184px, calc(100vw - 210px));
+    top: calc(100% + 6px);
+  }
+
+  .menu-account-menu button,
+  .menu-account-menu p {
+    font-size: 10px;
+    letter-spacing: .1em;
+    white-space: nowrap;
   }
 }
 

@@ -25,6 +25,37 @@
   transition: opacity .25s ease;
 }
 
+/* Everything on the pad rides on this layer, which leans toward the thumb (--lean-x and --lean-y,
+   from -1 to 1) and springs back with a little overshoot when it lets go. */
+.swipe-pad {
+  --lean-x: 0;
+  --lean-y: 0;
+  perspective: 420px;
+}
+
+.swipe-pad-body {
+  position: absolute;
+  inset: 0;
+  transform: rotateX(calc(var(--lean-y) * -12deg)) rotateY(calc(var(--lean-x) * 12deg))
+    translate(calc(var(--lean-x) * 3px), calc(var(--lean-y) * 3px));
+  transition: transform .42s cubic-bezier(.3, 1.7, .5, 1);
+}
+
+.swipe-pad.is-held .swipe-pad-body { transition: transform .08s linear; }
+
+/* The flat middle slides a little further than the walls, like a stick being pushed. */
+.swipe-pad-floor {
+  transform: translate(calc(var(--lean-x) * 9px), calc(var(--lean-y) * 9px));
+  transition: transform .42s cubic-bezier(.3, 1.7, .5, 1);
+}
+
+.swipe-pad.is-held .swipe-pad-floor { transition: transform .08s linear; }
+
+@media (prefers-reduced-motion: reduce) {
+  .swipe-pad-body,
+  .swipe-pad-floor { transform: none; transition: none; }
+}
+
 .swipe-pad.is-disabled {
   opacity: .4;
   cursor: default;
@@ -85,7 +116,8 @@
   font-weight: 600;
   letter-spacing: .18em;
   pointer-events: none;
-  transform: translate(-48%, -50%);
+  transform: translate(calc(-50% + var(--lean-x) * 5px), calc(-50% + var(--lean-y) * 5px));
+  transition: transform .42s cubic-bezier(.3, 1.7, .5, 1);
 }
 
 /* With the pad on screen the board gives up some height to it. */

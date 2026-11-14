@@ -41,6 +41,7 @@ export default function SwipePad({ onMove, disabled }) {
   const [lit, setLit] = useState(null);
   const timer = useRef(0);
   const wall = useRef(null);
+  const padRef = useRef(null);
 
   const flash = useCallback((direction) => {
     setLit(direction);
@@ -55,17 +56,45 @@ export default function SwipePad({ onMove, disabled }) {
     flash(direction);
   });
 
+  // The pad gives under the thumb: it tilts and its middle slides toward where the finger is, then
+  // springs back on release. Only CSS variables change, so nothing re-renders.
+  function lean(event) {
+    const pad = padRef.current;
+    if (!pad) return;
+    const box = pad.getBoundingClientRect();
+    const x = Math.max(-1, Math.min(1, ((event.clientX - box.left) / box.width - 0.5) * 2));
+    const y = Math.max(-1, Math.min(1, ((event.clientY - box.top) / box.height - 0.5) * 2));
+    pad.style.setProperty('--lean-x', x.toFixed(3));
+    pad.style.setProperty('--lean-y', y.toFixed(3));
+    pad.classList.add('is-held');
+  }
+
+  function release() {
+    const pad = padRef.current;
+    if (!pad) return;
+    pad.classList.remove('is-held');
+    pad.style.setProperty('--lean-x', '0');
+    pad.style.setProperty('--lean-y', '0');
+  }
+
+  function handlePointerMove(event) {
+    swipe.move(event);
+    if (padRef.current?.classList.contains('is-held')) lean(event);
+  }
+
   function handlePointerDown(event) {
     if (disabled) return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
     swipe.start(event);
+    lean(event);
     wall.current = wallAt(event);
     window.clearTimeout(timer.current);
     setLit(wall.current);
   }
 
   function handlePointerUp(event) {
+    release();
     const stroke = swipe.end();
     if (!stroke || stroke.id !== event.pointerId) return;
     // A touch that never travelled far enough to be a swipe is a tap on the wall it landed on.
@@ -79,20 +108,23 @@ export default function SwipePad({ onMove, disabled }) {
   }
 
   function handlePointerCancel() {
+    release();
     swipe.end();
     setLit(null);
   }
 
   return (
     <div
+      ref={padRef}
       className={`swipe-pad ${disabled ? 'is-disabled' : ''}`}
       role="group"
       aria-label="Swipe pad: swipe or tap to move the ball"
       onPointerDown={handlePointerDown}
-      onPointerMove={swipe.move}
+      onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
     >
+      <div className="swipe-pad-body">
       <svg className="swipe-pad-art" viewBox={`-1 -1 ${WIDTH + 2} ${HEIGHT + 2}`} aria-hidden="true">
         {Object.entries(WEDGES).map(([direction, points]) => (
           <polygon key={direction} points={points} className={`swipe-pad-wall ${lit === direction ? 'is-lit' : ''}`} />
@@ -111,6 +143,7 @@ export default function SwipePad({ onMove, disabled }) {
         </span>
       ))}
       <span className="swipe-pad-hint" aria-hidden="true">SWIPE</span>
+      </div>
     </div>
   );
 }

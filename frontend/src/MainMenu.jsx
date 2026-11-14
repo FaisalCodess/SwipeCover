@@ -534,10 +534,12 @@ function SettingsContent({ settings, onSettingsChange }) {
           }}
         />
       </div>
-      <div className="menu-settings-row menu-panel-item" style={{ '--i': 2 }}>
-        <span>SWIPE PAD</span>
-        <Toggle label="Swipe pad" checked={settings.swipePad} onChange={(swipePad) => onSettingsChange({ ...settings, swipePad })} />
-      </div>
+      {window.matchMedia('(pointer: coarse)').matches && (
+        <div className="menu-settings-row menu-panel-item" style={{ '--i': 2 }}>
+          <span>SWIPE PAD</span>
+          <Toggle label="Swipe pad" checked={settings.swipePad} onChange={(swipePad) => onSettingsChange({ ...settings, swipePad })} />
+        </div>
+      )}
 
       {[
         { key: 'musicVolume', label: 'MUSIC VOLUME', id: 'menu-settings-music-volume', preview: false },
@@ -942,8 +944,8 @@ function LevelOrbs({ cleared, firstRuns, disabled, onPlay, onRefuse }) {
   );
 }
 
-// On a phone: the lowest point of the logo and the account button under it, where the orbs may begin.
-const PHONE_HEADER_BOTTOM = 148;
+// On a phone: how far up the screen the level ring may reach (it passes behind the logo's right side).
+const PHONE_RING_TOP = 62;
 
 const PANEL_TITLES = { settings: 'Settings', leaderboard: 'Global Leaderboard' };
 
@@ -1056,9 +1058,9 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
 
   useEffect(() => () => window.clearTimeout(panelTimer.current), []);
 
-  // On a phone the menu is a column pinned to the bottom, and the level orbs fill the free space
-  // between the logo and the menu. This measures that space, so the ring is sized to fit it and
-  // never turns behind a menu button.
+  // On a phone the level ring lives in the corner above the menu list. This measures the room
+  // between the top of the screen and the list, so the ring is sized to fit and never turns
+  // behind a menu button, whatever the phone's height.
   useLayoutEffect(() => {
     const root = menuRef.current;
     const section = sectionRef.current;
@@ -1071,14 +1073,14 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
         root.removeAttribute('data-tight');
         return;
       }
-      const top = PHONE_HEADER_BOTTOM;
-      const bottom = section.getBoundingClientRect().top - 6;
+      const top = PHONE_RING_TOP;
+      const bottom = section.getBoundingClientRect().top - 4;
       const room = Math.max(bottom - top, 0);
-      const radius = Math.min(Math.max((room - 56) / 2, 38), Math.min(96, window.innerWidth * 0.22));
+      const radius = Math.min(Math.max((room - 52) / 2, 34), Math.min(96, window.innerWidth * 0.22));
       root.style.setProperty('--stage-y', `${Math.round(top + room / 2)}px`);
       root.style.setProperty('--orbit-fit', `${Math.round(radius)}px`);
       // A ring this small has no room for the words in its middle.
-      root.toggleAttribute('data-tight', radius < 56);
+      root.toggleAttribute('data-tight', radius < 50);
     }
     fit();
     const observer = new ResizeObserver(fit);

@@ -9,7 +9,7 @@ export const MUSIC_URL = `${import.meta.env.BASE_URL}music/background.mp3`;
 // and fades in over FADE_IN_SECONDS.
 const FADE_OUT_SECONDS = 4;
 const FADE_IN_SECONDS = 4;
-const TICK_MS = 100;
+const TICK_MS = 50;
 // Audio element volume (0-1) when the slider is at 100%. Lower this to make all music quieter.
 const MUSIC_MAX_VOLUME = 0.15;
 // Higher = quieter low end.
@@ -17,13 +17,12 @@ const VOLUME_CURVE = 1.5;
 
 // Swipe Rush turns the track up. `intensity` is 0 as recorded, 1 in Swipe Rush, 2 for its last
 // minute. The track plays faster, and its pitch rises with the speed, like a tape being rushed:
-// that is what makes it feel urgent. The speed glides there over a second or two, so entering
-// the cave sounds like a riser, and leaving it eases back to the original.
+// that is what makes it feel urgent. The change is one quick jump under a short dip in volume.
 // To tune the feel, change these numbers (1 = original speed).
 const RATE_BY_INTENSITY = [1, 1.1, 1.17];
-const RATE_TICK_MS = 120;
-const RATE_STEP = 0.0085; // per tick: about a second to the new speed
-const BOOST_STEP = 0.02;
+const DIP_TICK_MS = 40;
+const DIP_DOWN_STEPS = 4;
+const DIP_UP_STEPS = 8;
 const RUSH_VOLUME_BOOST = 1.25;
 
 // Slider (0-100) -> audio element volume (0-MUSIC_MAX_VOLUME).
@@ -47,20 +46,20 @@ export default function BackgroundMusic({ unlocked, playing, volume, intensity =
   const audioRef = useRef(null);
 
   const baseLevel = musicVolume(volume) * fadeGain(fade);
-  // The Rush volume boost glides in with the speed instead of jumping, which would click.
-  const boostRef = useRef(1);
+  // `dip` is a short duck in the volume that hides a speed change; `boost` is the Rush loudness.
+  const dipRef = useRef(1);
+  const boostRef = useRef(intensity > 0 ? RUSH_VOLUME_BOOST : 1);
   const baseRef = useRef(baseLevel);
   baseRef.current = baseLevel;
   const applyVolume = () => {
     const audio = audioRef.current;
-    if (audio) audio.volume = Math.min(1, baseRef.current * boostRef.current);
+    if (audio) audio.volume = Math.min(1, baseRef.current * boostRef.current * dipRef.current);
   };
 
   useEffect(applyVolume, [baseLevel, unlocked]);
 
-  // The pitch follows the speed from the start and never switches mode. Flipping `preservesPitch`
-  // while the track plays makes the browser rebuild its audio stretcher, and phones glitch when
-  // it does. At normal speed this setting changes nothing you can hear.
+  // The pitch follows the speed and never switches mode: flipping `preservesPitch` while the
+  // track plays makes the browser rebuild its stretcher, and phones glitch when it does.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -69,23 +68,39 @@ export default function BackgroundMusic({ unlocked, playing, volume, intensity =
     audio.webkitPreservesPitch = false;
   }, [unlocked]);
 
-  // Glides the playback speed (and the volume boost) to where this intensity wants it, in few,
-  // small steps: every change of speed costs a phone a little work, so fewer is smoother.
+  // Every change of playback speed makes a phone re-prepare its audio, which is the little glitch
+  // you hear if the speed is nudged step by step. So it changes once, in a single jump, while the
+  // volume is ducked for a moment: the glitch happens in the quiet and is not heard.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return undefined;
     const target = RATE_BY_INTENSITY[Math.min(intensity, RATE_BY_INTENSITY.length - 1)];
     const boostTarget = intensity > 0 ? RUSH_VOLUME_BOOST : 1;
-    const timer = window.setInterval(() => {
-      const gap = target - audio.playbackRate;
-      const boostGap = boostTarget - boostRef.current;
-      if (Math.abs(gap) <= RATE_STEP) audio.playbackRate = target;
-      else audio.playbackRate += Math.sign(gap) * RATE_STEP;
-      boostRef.current = Math.abs(boostGap) <= BOOST_STEP ? boostTarget : boostRef.current + Math.sign(boostGap) * BOOST_STEP;
+    if (Math.abs(audio.playbackRate - target) < 0.001) {
+      boostRef.current = boostTarget;
       applyVolume();
-      if (audio.playbackRate === target && boostRef.current === boostTarget) window.clearInterval(timer);
-    }, RATE_TICK_MS);
-    return () => window.clearInterval(timer);
+      return undefined;
+    }
+    let step = 0;
+    const timer = window.setInterval(() => {
+      step += 1;
+      if (step <= DIP_DOWN_STEPS) {
+        dipRef.current = 1 - step / DIP_DOWN_STEPS;
+      } else if (step === DIP_DOWN_STEPS + 1) {
+        dipRef.current = 0;
+        audio.playbackRate = target;
+        boostRef.current = boostTarget;
+      } else {
+        dipRef.current = Math.min(1, (step - DIP_DOWN_STEPS - 1) / DIP_UP_STEPS);
+        if (dipRef.current >= 1) window.clearInterval(timer);
+      }
+      applyVolume();
+    }, DIP_TICK_MS);
+    return () => {
+      window.clearInterval(timer);
+      dipRef.current = 1;
+      applyVolume();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intensity, unlocked]);
 

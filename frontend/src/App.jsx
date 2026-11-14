@@ -84,6 +84,8 @@ const MAX_HISTORY = 400;
 const CELEBRATION_MS = 700;
 // Matches the `pop-out` animation in index.css.
 const POPUP_EXIT_MS = 200;
+// The swipe pad is for touch screens only: on a computer there is nothing to swipe with.
+export const TOUCH_SCREEN = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(pointer: coarse)').matches);
 const DEFAULT_SETTINGS = {
   theme: 'dark',
   music: true,
@@ -91,7 +93,7 @@ const DEFAULT_SETTINGS = {
   musicVolume: 70,
   sfxVolume: 65,
   // The on-screen swipe pad is on by default where the screen is touched, off where there is a mouse.
-  swipePad: typeof window !== 'undefined' && Boolean(window.matchMedia?.('(pointer: coarse)').matches),
+  swipePad: TOUCH_SCREEN,
 };
 
 function pruneLeaderboard(leaderboard, today) {
@@ -372,6 +374,7 @@ function SettingsDialog({ settings, onSettingsChange, onClose, closing }) {
               </div>
               <Switch label="Sound effects" checked={settings.sfx} onChange={(sfx) => onSettingsChange({ ...settings, sfx })} />
             </div>
+            {TOUCH_SCREEN && (
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <Gamepad2 size={18} className={settings.swipePad ? 'text-accent' : 'text-faint'} />
@@ -379,6 +382,7 @@ function SettingsDialog({ settings, onSettingsChange, onClose, closing }) {
               </div>
               <Switch label="Swipe pad" checked={settings.swipePad} onChange={(swipePad) => onSettingsChange({ ...settings, swipePad })} />
             </div>
+            )}
             {[
               { key: 'musicVolume', label: 'Music volume' },
               { key: 'sfxVolume', label: 'Sound effects volume' },
@@ -636,6 +640,7 @@ export default function App() {
   const initial = useRef(null);
   initial.current ||= readSavedState();
   const [settings, setSettings] = useState(initial.current.settings);
+  const padOn = TOUCH_SCREEN && settings.swipePad;
   const [leaderboard, setLeaderboard] = useState(initial.current.leaderboard);
   // Who is logged in (from the saved login), as { id, name }. Both are null for a guest.
   const [player, setPlayer] = useState(() => {
@@ -1725,7 +1730,7 @@ export default function App() {
       </button>
       <div className={`camera ${travel ? `camera-${travel}` : ''}`}>
       {dailyRun && (screen === 'game' || travel) && (
-        <section className={`duel-menu game-view ${settings.swipePad ? 'has-pad' : ''} ${gameLive ? 'is-live' : ''}`} aria-label="Swipe Cover game">
+        <section className={`duel-menu game-view ${padOn ? 'has-pad' : ''} ${gameLive ? 'is-live' : ''}`} aria-label="Swipe Cover game">
           <SkyAbove />
           <div className="menu-grain" aria-hidden="true" />
 
@@ -1761,7 +1766,7 @@ export default function App() {
                   })}
                 </span>
               </div>
-              {!settings.swipePad && <RestartChip onClick={restartLevel} disabled={!playing || run.moves === 0} />}
+              {!padOn && <RestartChip onClick={restartLevel} disabled={!playing || run.moves === 0} />}
               <div className="game-timer">
                 <Clock3 size={16} strokeWidth={1.5} />
                 <TimerText read={stopwatch.read} className="game-timer-text tabular-nums" />
@@ -1775,7 +1780,7 @@ export default function App() {
               phase={phase}
               onMove={requestMove}
               onResume={resumeGame}
-              swipeEnabled={!settings.swipePad}
+              swipeEnabled={!padOn}
             />
 
             <div className="game-statusbar">
@@ -1786,12 +1791,12 @@ export default function App() {
 
             <div className="game-actions">
               {/* With the swipe pad on, Restart sits here, just above the pad. Otherwise it is in the row above the board. */}
-              {settings.swipePad && <RestartChip onClick={restartLevel} disabled={!playing || run.moves === 0} />}
+              {padOn && <RestartChip onClick={restartLevel} disabled={!playing || run.moves === 0} />}
               <GameChip onClick={() => pauseGame('manual')} disabled={!playing}>
                 <Pause size={14} strokeWidth={1.6} /> PAUSE
               </GameChip>
             </div>
-            {settings.swipePad && <SwipePad onMove={requestMove} disabled={phase !== 'playing'} />}
+            {padOn && <SwipePad onMove={requestMove} disabled={phase !== 'playing'} />}
           </div>
         </section>
       )}
@@ -1819,7 +1824,7 @@ export default function App() {
       {/* Below the menu, so the camera falls to it: Swipe Rush, played in a cave. */}
       {rushRun && rush && (screen === 'rush' || travel === 'dive' || travel === 'rise') && (
         <section
-          className={`duel-menu game-view rush-view ${settings.swipePad ? 'has-pad' : ''} ${gameLive ? 'is-live' : ''}`}
+          className={`duel-menu game-view rush-view ${padOn ? 'has-pad' : ''} ${gameLive ? 'is-live' : ''}`}
           data-heat={heat}
           aria-label="Swipe Rush"
         >
@@ -1851,7 +1856,7 @@ export default function App() {
               versus={rush.versus ? { opponent: rush.opponent, you: rush.you, them: rush.them, mode: rush.mode } : null}
               totalMs={rush.versus ? rush.totalMs : undefined}
             >
-              {!settings.swipePad && <RestartChip onClick={restartLevel} disabled={!playing || rushRun.moves === 0} />}
+              {!padOn && <RestartChip onClick={restartLevel} disabled={!playing || rushRun.moves === 0} />}
             </RushHud>
 
             <GameBoard
@@ -1862,7 +1867,7 @@ export default function App() {
               onMove={requestMove}
               onResume={resumeGame}
               mapKey={rushRun.index}
-              swipeEnabled={!settings.swipePad}
+              swipeEnabled={!padOn}
             />
 
             <div className="game-statusbar">
@@ -1872,7 +1877,7 @@ export default function App() {
             </div>
 
             {/* No pause: the clock cannot stop. Restart costs time like everything else. */}
-            {settings.swipePad && (
+            {padOn && (
               <>
                 <div className="game-actions">
                   <RestartChip onClick={restartLevel} disabled={!playing || rushRun.moves === 0} />
