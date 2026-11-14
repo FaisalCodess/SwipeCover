@@ -2039,11 +2039,13 @@
   .menu-keys { gap: 7px; }
 
   .menu-level-stage {
-    --orbit-radius: clamp(48px, 18vw, 100px);
-    top: 25%;
-    left: 66%;
+    --orbit-radius: var(--orbit-fit, clamp(48px, 18vw, 100px));
+    top: var(--stage-y, 25%);
+    left: var(--stage-x, 66%);
     width: min(80vw, 340px);
   }
+
+  [data-tight] .menu-level-readout { display: none; }
 
   /* Little room inside the ring on a phone: smaller type, and the hint line goes. */
   .menu-level-readout { width: calc(var(--orbit-radius) * 2 - 46px); }
@@ -2056,6 +2058,10 @@
   .menu-ruin-right { right: -4%; }
   .menu-range { height: 43vh; min-height: 220px; }
   .menu-footer { gap: 10px; font-size: 7px; letter-spacing: .12em; }
+}
+
+@media (max-width: 760px) and (max-height: 700px) {
+  .menu-nav-item { min-height: 50px; }
 }
 
 @media (max-width: 390px) {
@@ -2117,4 +2123,9 @@
   .menu-sky-glow {
     animation: none;
   }
+}
+
+/* No hover on a touch screen, so the volume's percentage is always shown there. */
+@media (hover: none) {
+  .menu-settings-volume output { opacity: 1; }
 }

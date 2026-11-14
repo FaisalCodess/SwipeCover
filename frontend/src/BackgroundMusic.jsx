@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { getAudioContext } from './audio.js';
 
 // Put your music file at frontend/public/music/background.mp3 (any format the browser can
@@ -6,11 +6,18 @@ import { getAudioContext } from './audio.js';
 // cannot play, the game falls back to the built-in synth melody.
 export const MUSIC_URL = `${import.meta.env.BASE_URL}music/background.mp3`;
 
+// The track is played straight through Web Audio (decoded once, then played as a buffer) instead
+// of through an <audio> element. Phones are bad at the element: they ignore its volume, they
+// glitch when its speed changes, they stutter when it seeks back to the start, and pausing one
+// that is routed through Web Audio can leave the last sliver of sound repeating on a loop. A
+// buffer has none of these problems: volume and speed are smooth, sample-accurate ramps.
+
 // The track fades out over its last FADE_OUT_SECONDS, then starts again from the top
 // and fades in over FADE_IN_SECONDS.
 const FADE_OUT_SECONDS = 4;
 const FADE_IN_SECONDS = 4;
 const TICK_MS = 50;
+
 // The slider's 0-70 range keeps the original quiet scale (70 is the level the game always shipped
 // with); from 70 up to 100 the music climbs smoothly to full volume, where the phone's own volume
 // buttons are the only limit.
@@ -20,15 +27,16 @@ const VOLUME_CURVE = 1.5;
 const KNEE_LEVEL = QUIET_MAX * (KNEE / 100) ** VOLUME_CURVE;
 
 // Swipe Rush turns the track up. `intensity` is 0 as recorded, 1 in Swipe Rush, 2 for its last
-// minute. The track plays faster and its pitch rises with the speed, like a tape being rushed. The
-// speed changes once, in a single jump, while the volume is ducked for a moment (see below).
+// minute. The track plays faster and its pitch rises with the speed, like a tape being rushed.
+// The speed glides there over RATE_GLIDE_SECONDS, so entering the cave sounds like a riser, and
+// leaving it eases back to the original. To tune the feel, change these numbers (1 = original).
 const RATE_BY_INTENSITY = [1, 1.1, 1.17];
+const RATE_GLIDE_SECONDS = 1.8;
 const RUSH_VOLUME_BOOST = 1.25;
-const DIP_TIME_CONSTANT = 0.04; // seconds: how fast the volume drops for the change
-const DIP_SWAP_MS = 220; // the speed changes here, in the quiet
-const DIP_RETURN_MS = 280; // and the volume starts coming back here
-const DIP_RETURN_CONSTANT = 0.16;
-const VOLUME_SMOOTHING = 0.045; // seconds: ordinary volume changes glide instead of stepping
+// How quickly the volume follows the slider, the fades and the on/off switch (seconds).
+const VOLUME_SMOOTHING = 0.05;
+// Switching the music off fades it out for this long before the sound is stopped.
+const STOP_AFTER_SECONDS = 0.25;
 
 // Slider (0-100) -> loudness (0-1).
 export function musicVolume(slider) {
@@ -38,176 +46,202 @@ export function musicVolume(slider) {
 }
 
 // 'playing' = full level, 'out' = fading out at the end, 'in' = fading in from the start.
-function fadeGain({ phase, progress }) {
+function fadeGain(phase, progress) {
   if (phase === 'out') return Math.cos(progress * Math.PI / 2);
   if (phase === 'in') return Math.sin(progress * Math.PI / 2);
   return 1;
 }
 
+const rateFor = (intensity) => RATE_BY_INTENSITY[Math.min(intensity, RATE_BY_INTENSITY.length - 1)];
+
+// The decoded track is kept for the life of the page, so it is only fetched and decoded once.
+let trackPromise = null;
+function loadTrack(context) {
+  trackPromise ||= fetch(MUSIC_URL)
+    .then((response) => {
+      if (!response.ok) throw new Error(`Music file not found (${response.status}).`);
+      return response.arrayBuffer();
+    })
+    // Older Safari only knows the callback form of decodeAudioData.
+    .then((data) => new Promise((resolve, reject) => context.decodeAudioData(data, resolve, reject)))
+    .catch((error) => {
+      trackPromise = null;
+      throw error;
+    });
+  return trackPromise;
+}
+
 // Plays the local music file. Mounted only after the first user gesture (`unlocked`)
-// so the browser's autoplay rules allow sound.
+// so the browser's autoplay rules allow sound. It draws nothing.
 export default function BackgroundMusic({ unlocked, playing, volume, intensity = 0, onError }) {
-  const [fade, setFade] = useState({ phase: 'playing', progress: 0 });
-  const fadeRef = useRef(fade);
-  const audioRef = useRef(null);
-
-  const baseLevel = musicVolume(volume) * fadeGain(fade);
-  // `dip` is a short duck in the volume that hides a speed change; `boost` is the Rush loudness.
-  const dipRef = useRef(1);
-  const boostRef = useRef(intensity > 0 ? RUSH_VOLUME_BOOST : 1);
-  const baseRef = useRef(baseLevel);
-  baseRef.current = baseLevel;
-  const graphRef = useRef(null);
-
-  // The loudness goes through a Web Audio gain node, not the audio element's own `volume`: phones
-  // (iPhones above all) ignore the element's volume, so the slider and every fade did nothing
-  // there. A gain node works everywhere and glides between values instead of stepping.
-  function applyVolume(timeConstant = VOLUME_SMOOTHING) {
-    const target = Math.min(1, baseRef.current * boostRef.current * dipRef.current);
-    const graph = graphRef.current;
-    if (graph) {
-      graph.gain.gain.setTargetAtTime(target, graph.context.currentTime, timeConstant);
-    } else if (audioRef.current) {
-      audioRef.current.volume = target;
-    }
-  }
+  const props = useRef({ playing, volume, intensity, onError });
+  props.current = { playing, volume, intensity, onError };
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!unlocked || !audio || graphRef.current) return;
-    try {
-      const context = getAudioContext();
-      if (!context) return;
-      const source = context.createMediaElementSource(audio);
-      const gain = context.createGain();
-      gain.gain.value = Math.min(1, baseRef.current * boostRef.current * dipRef.current);
-      source.connect(gain);
-      gain.connect(context.destination);
-      audio.volume = 1;
-      graphRef.current = { context, gain };
-    } catch (error) {
-      console.info('Music volume falls back to the player.', error);
-    }
-  }, [unlocked]);
-
-  useEffect(() => { applyVolume(); }, [baseLevel, unlocked]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // The pitch follows the speed and never switches mode: flipping `preservesPitch` while the
-  // track plays makes the browser rebuild its stretcher, and phones glitch when it does.
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.preservesPitch = false;
-    audio.mozPreservesPitch = false;
-    audio.webkitPreservesPitch = false;
-  }, [unlocked]);
-
-  // A change of playback speed makes a phone re-prepare its audio, which is a small glitch if it is
-  // heard. So the speed changes once, while the volume is ducked: the glitch happens in the quiet.
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return undefined;
-    const target = RATE_BY_INTENSITY[Math.min(intensity, RATE_BY_INTENSITY.length - 1)];
-    const boostTarget = intensity > 0 ? RUSH_VOLUME_BOOST : 1;
-    if (Math.abs(audio.playbackRate - target) < 0.001) {
-      boostRef.current = boostTarget;
-      applyVolume();
+    if (!unlocked) return undefined;
+    const context = getAudioContext();
+    if (!context) {
+      props.current.onError?.(new Error('No Web Audio here.'));
       return undefined;
     }
-    dipRef.current = 0;
-    applyVolume(DIP_TIME_CONSTANT);
-    const swap = window.setTimeout(() => {
-      audio.playbackRate = target;
-      boostRef.current = boostTarget;
-    }, DIP_SWAP_MS);
-    const back = window.setTimeout(() => {
-      dipRef.current = 1;
-      applyVolume(DIP_RETURN_CONSTANT);
-    }, DIP_RETURN_MS);
-    return () => {
-      window.clearTimeout(swap);
-      window.clearTimeout(back);
-      dipRef.current = 1;
+
+    const gain = context.createGain();
+    gain.gain.value = 0;
+    gain.connect(context.destination);
+
+    // Everything the player remembers between ticks.
+    const state = {
+      buffer: null,
+      source: null,
+      position: 0, // seconds into the track
+      lastTime: context.currentTime,
+      phase: 'playing',
+      progress: 0,
+      rateFrom: 1,
+      rateTo: 1,
+      rateStart: 0,
+      stopAt: 0,
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intensity, unlocked]);
+    let cancelled = false;
+    let timer = 0;
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (playing) {
-      audio.play().catch((error) => {
-        // A blocked autoplay is retried on the next toggle; anything else means the file is unusable.
-        if (error?.name !== 'NotAllowedError' && error?.name !== 'AbortError') onError?.(error);
-      });
-    } else {
-      audio.pause();
+    const rateAt = (time) => {
+      const done = Math.min(1, Math.max(0, (time - state.rateStart) / RATE_GLIDE_SECONDS));
+      return state.rateFrom + (state.rateTo - state.rateFrom) * done;
+    };
+
+    // Glides the running source from where its speed is now to the wanted speed.
+    function scheduleRate(source, now) {
+      const param = source.playbackRate;
+      const current = rateAt(now);
+      const endTime = state.rateStart + RATE_GLIDE_SECONDS;
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(current, now);
+      if (state.rateTo !== current) param.linearRampToValueAtTime(state.rateTo, Math.max(endTime, now + 0.02));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, unlocked]);
 
-  useEffect(() => {
-    if (!unlocked || !playing) return undefined;
-    let last = performance.now();
-    const timer = window.setInterval(() => {
-      const audio = audioRef.current;
-      const now = performance.now();
-      const dt = Math.min(now - last, 250) / 1000;
-      last = now;
-      const next = { ...fadeRef.current };
-      if (next.phase === 'playing') {
-        const duration = audio?.duration;
-        const time = audio?.currentTime;
-        if (!(duration > FADE_OUT_SECONDS * 2 && time > 0 && duration - time <= FADE_OUT_SECONDS)) return;
-        next.phase = 'out';
-        next.progress = 0;
-      } else if (next.phase === 'out') {
-        next.progress = Math.min(1, next.progress + dt / FADE_OUT_SECONDS);
-        if (next.progress >= 1) restart(next);
-      } else {
-        next.progress = Math.min(1, next.progress + dt / FADE_IN_SECONDS);
-        if (next.progress >= 1) {
-          next.phase = 'playing';
-          next.progress = 0;
+    function stopSource() {
+      const source = state.source;
+      if (!source) return;
+      state.source = null;
+      source.onended = null;
+      try {
+        source.stop();
+      } catch {
+        // Already stopped.
+      }
+      source.disconnect();
+    }
+
+    function startSource(offset) {
+      const now = context.currentTime;
+      stopSource();
+      const source = context.createBufferSource();
+      source.buffer = state.buffer;
+      source.connect(gain);
+      scheduleRate(source, now);
+      // Safety net: if the track reaches its very end anyway (a throttled background tab can skip
+      // the fade), start over with a fade-in instead of going silent.
+      source.onended = () => {
+        if (state.source !== source) return;
+        state.source = null;
+        state.position = 0;
+        state.phase = 'in';
+        state.progress = 0;
+      };
+      source.start(0, offset % state.buffer.duration);
+      state.source = source;
+      state.position = offset % state.buffer.duration;
+    }
+
+    function tick() {
+      if (!state.buffer) return;
+      const { playing: wantPlay, volume: slider, intensity: wantIntensity } = props.current;
+      const now = context.currentTime;
+      const dt = Math.min(Math.max(now - state.lastTime, 0), 0.25);
+      state.lastTime = now;
+      if (context.state !== 'running') context.resume().catch(() => {});
+
+      // A new intensity starts a glide of the speed.
+      const wantRate = rateFor(wantIntensity);
+      if (wantRate !== state.rateTo) {
+        state.rateFrom = rateAt(now);
+        state.rateStart = now;
+        state.rateTo = wantRate;
+        if (state.source) scheduleRate(state.source, now);
+      }
+
+      if (wantPlay) {
+        state.stopAt = 0;
+        if (!state.source) startSource(state.position);
+      } else if (state.source) {
+        // Fade out first, then stop: nothing is cut off mid-sound.
+        if (!state.stopAt) state.stopAt = now + STOP_AFTER_SECONDS;
+        else if (now >= state.stopAt) stopSource();
+      }
+
+      if (state.source && wantPlay) {
+        state.position += dt * rateAt(now);
+        const remaining = state.buffer.duration - state.position;
+        if (state.phase === 'playing') {
+          // The fade needs track time to last as long as the speed makes it run, so start early enough.
+          if (remaining <= FADE_OUT_SECONDS * RATE_BY_INTENSITY[RATE_BY_INTENSITY.length - 1]) {
+            state.phase = 'out';
+            state.progress = 0;
+          }
+        } else if (state.phase === 'out') {
+          state.progress = Math.min(1, state.progress + dt / FADE_OUT_SECONDS);
+          if (state.progress >= 1) {
+            // Silent by now: jump back to the start and begin fading in.
+            startSource(0);
+            state.phase = 'in';
+            state.progress = 0;
+          }
+        } else {
+          state.progress = Math.min(1, state.progress + dt / FADE_IN_SECONDS);
+          if (state.progress >= 1) {
+            state.phase = 'playing';
+            state.progress = 0;
+          }
         }
       }
-      fadeRef.current = next;
-      setFade(next);
-    }, TICK_MS);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unlocked, playing]);
 
-  // Silent by now: jump back to the start and begin fading in.
-  function restart(next) {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.currentTime = 0;
-      audio.play().catch(() => {});
+      const level = wantPlay
+        ? Math.min(1, musicVolume(slider) * fadeGain(state.phase, state.progress) * (wantIntensity > 0 ? RUSH_VOLUME_BOOST : 1))
+        : 0;
+      gain.gain.setTargetAtTime(level, now, VOLUME_SMOOTHING);
     }
-    next.phase = 'in';
-    next.progress = 0;
-  }
 
-  if (!unlocked) return null;
+    function wake() {
+      if (!document.hidden && context.state !== 'running') context.resume().catch(() => {});
+    }
 
-  // Safety net: if the track reaches its very end anyway (e.g. a throttled background
-  // tab skipped the fade), start over with a fade-in instead of going silent.
-  const handleEnded = () => {
-    if (fadeRef.current.phase === 'in') return;
-    const next = { ...fadeRef.current };
-    restart(next);
-    fadeRef.current = next;
-    setFade(next);
-  };
+    loadTrack(context)
+      .then((buffer) => {
+        if (cancelled) return;
+        state.buffer = buffer;
+        state.lastTime = context.currentTime;
+        const wanted = rateFor(props.current.intensity);
+        state.rateFrom = wanted;
+        state.rateTo = wanted;
+        state.phase = 'playing';
+        state.progress = 0;
+        tick();
+        timer = window.setInterval(tick, TICK_MS);
+      })
+      .catch((error) => {
+        if (!cancelled) props.current.onError?.(error);
+      });
 
-  return (
-    <audio
-      ref={audioRef}
-      src={MUSIC_URL}
-      preload="auto"
-      onEnded={handleEnded}
-      onError={onError}
-    />
-  );
+    document.addEventListener('visibilitychange', wake);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', wake);
+      stopSource();
+      gain.disconnect();
+    };
+  }, [unlocked]);
+
+  return null;
 }
