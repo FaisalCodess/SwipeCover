@@ -1463,7 +1463,7 @@ export default function App() {
 
       if (!next) {
         setBump((previous) => ({ id: (previous?.id ?? 0) + 1, direction }));
-        setFeedback('Blocked: a wall or the edge is in the way.');
+        setFeedback('BLOCKED');
         sfx('blocked');
         vibrate(12);
         continue;
@@ -1786,7 +1786,7 @@ export default function App() {
             <div className="game-statusbar">
               <span className="game-status-dots"><i /> {run.remaining} {run.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
               <span role="status" aria-live="polite" className="game-status-feedback">{feedback}</span>
-              <span className="tabular-nums">{run.moves} {run.moves === 1 ? 'MOVE' : 'MOVES'}</span>
+              <span className="tabular-nums shrink-0 whitespace-nowrap">{run.moves} {run.moves === 1 ? 'MOVE' : 'MOVES'}</span>
             </div>
 
             <div className="game-actions">
@@ -1873,7 +1873,7 @@ export default function App() {
             <div className="game-statusbar">
               <span className="game-status-dots"><i /> {rushRun.remaining} {rushRun.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
               <span role="status" aria-live="polite" className="game-status-feedback">{feedback}</span>
-              <span className="tabular-nums">{rushRun.moves} {rushRun.moves === 1 ? 'MOVE' : 'MOVES'}</span>
+              <span className="tabular-nums shrink-0 whitespace-nowrap">{rushRun.moves} {rushRun.moves === 1 ? 'MOVE' : 'MOVES'}</span>
             </div>
 
             {/* No pause: the clock cannot stop. Restart costs time like everything else. */}

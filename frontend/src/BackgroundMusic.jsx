@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { getAudioContext } from './audio.js';
 
 // Put your music file at frontend/public/music/background.mp3 (any format the browser can
 // play works; change the name here if you use .ogg, .m4a, etc.). If the file is missing or
@@ -10,25 +11,30 @@ export const MUSIC_URL = `${import.meta.env.BASE_URL}music/background.mp3`;
 const FADE_OUT_SECONDS = 4;
 const FADE_IN_SECONDS = 4;
 const TICK_MS = 50;
-// Audio element volume (0-1) when the slider is at 100%. Lower this to make all music quieter.
-const MUSIC_MAX_VOLUME = 0.15;
-// Higher = quieter low end.
+// The slider's 0-70 range keeps the original quiet scale (70 is the level the game always shipped
+// with); from 70 up to 100 the music climbs smoothly to full volume, where the phone's own volume
+// buttons are the only limit.
+const KNEE = 70;
+const QUIET_MAX = 0.15;
 const VOLUME_CURVE = 1.5;
+const KNEE_LEVEL = QUIET_MAX * (KNEE / 100) ** VOLUME_CURVE;
 
 // Swipe Rush turns the track up. `intensity` is 0 as recorded, 1 in Swipe Rush, 2 for its last
-// minute. The track plays faster, and its pitch rises with the speed, like a tape being rushed:
-// that is what makes it feel urgent. The change is one quick jump under a short dip in volume.
-// To tune the feel, change these numbers (1 = original speed).
+// minute. The track plays faster and its pitch rises with the speed, like a tape being rushed. The
+// speed changes once, in a single jump, while the volume is ducked for a moment (see below).
 const RATE_BY_INTENSITY = [1, 1.1, 1.17];
-const DIP_TICK_MS = 40;
-const DIP_DOWN_STEPS = 4;
-const DIP_UP_STEPS = 8;
 const RUSH_VOLUME_BOOST = 1.25;
+const DIP_TIME_CONSTANT = 0.04; // seconds: how fast the volume drops for the change
+const DIP_SWAP_MS = 220; // the speed changes here, in the quiet
+const DIP_RETURN_MS = 280; // and the volume starts coming back here
+const DIP_RETURN_CONSTANT = 0.16;
+const VOLUME_SMOOTHING = 0.045; // seconds: ordinary volume changes glide instead of stepping
 
-// Slider (0-100) -> audio element volume (0-MUSIC_MAX_VOLUME).
+// Slider (0-100) -> loudness (0-1).
 export function musicVolume(slider) {
-  const level = Math.min(Math.max(slider, 0), 100) / 100;
-  return MUSIC_MAX_VOLUME * level ** VOLUME_CURVE;
+  const value = Math.min(Math.max(slider, 0), 100);
+  if (value <= KNEE) return QUIET_MAX * (value / 100) ** VOLUME_CURVE;
+  return KNEE_LEVEL * (1 / KNEE_LEVEL) ** ((value - KNEE) / (100 - KNEE));
 }
 
 // 'playing' = full level, 'out' = fading out at the end, 'in' = fading in from the start.
@@ -51,12 +57,40 @@ export default function BackgroundMusic({ unlocked, playing, volume, intensity =
   const boostRef = useRef(intensity > 0 ? RUSH_VOLUME_BOOST : 1);
   const baseRef = useRef(baseLevel);
   baseRef.current = baseLevel;
-  const applyVolume = () => {
-    const audio = audioRef.current;
-    if (audio) audio.volume = Math.min(1, baseRef.current * boostRef.current * dipRef.current);
-  };
+  const graphRef = useRef(null);
 
-  useEffect(applyVolume, [baseLevel, unlocked]);
+  // The loudness goes through a Web Audio gain node, not the audio element's own `volume`: phones
+  // (iPhones above all) ignore the element's volume, so the slider and every fade did nothing
+  // there. A gain node works everywhere and glides between values instead of stepping.
+  function applyVolume(timeConstant = VOLUME_SMOOTHING) {
+    const target = Math.min(1, baseRef.current * boostRef.current * dipRef.current);
+    const graph = graphRef.current;
+    if (graph) {
+      graph.gain.gain.setTargetAtTime(target, graph.context.currentTime, timeConstant);
+    } else if (audioRef.current) {
+      audioRef.current.volume = target;
+    }
+  }
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!unlocked || !audio || graphRef.current) return;
+    try {
+      const context = getAudioContext();
+      if (!context) return;
+      const source = context.createMediaElementSource(audio);
+      const gain = context.createGain();
+      gain.gain.value = Math.min(1, baseRef.current * boostRef.current * dipRef.current);
+      source.connect(gain);
+      gain.connect(context.destination);
+      audio.volume = 1;
+      graphRef.current = { context, gain };
+    } catch (error) {
+      console.info('Music volume falls back to the player.', error);
+    }
+  }, [unlocked]);
+
+  useEffect(() => { applyVolume(); }, [baseLevel, unlocked]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The pitch follows the speed and never switches mode: flipping `preservesPitch` while the
   // track plays makes the browser rebuild its stretcher, and phones glitch when it does.
@@ -68,9 +102,8 @@ export default function BackgroundMusic({ unlocked, playing, volume, intensity =
     audio.webkitPreservesPitch = false;
   }, [unlocked]);
 
-  // Every change of playback speed makes a phone re-prepare its audio, which is the little glitch
-  // you hear if the speed is nudged step by step. So it changes once, in a single jump, while the
-  // volume is ducked for a moment: the glitch happens in the quiet and is not heard.
+  // A change of playback speed makes a phone re-prepare its audio, which is a small glitch if it is
+  // heard. So the speed changes once, while the volume is ducked: the glitch happens in the quiet.
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return undefined;
@@ -81,25 +114,20 @@ export default function BackgroundMusic({ unlocked, playing, volume, intensity =
       applyVolume();
       return undefined;
     }
-    let step = 0;
-    const timer = window.setInterval(() => {
-      step += 1;
-      if (step <= DIP_DOWN_STEPS) {
-        dipRef.current = 1 - step / DIP_DOWN_STEPS;
-      } else if (step === DIP_DOWN_STEPS + 1) {
-        dipRef.current = 0;
-        audio.playbackRate = target;
-        boostRef.current = boostTarget;
-      } else {
-        dipRef.current = Math.min(1, (step - DIP_DOWN_STEPS - 1) / DIP_UP_STEPS);
-        if (dipRef.current >= 1) window.clearInterval(timer);
-      }
-      applyVolume();
-    }, DIP_TICK_MS);
-    return () => {
-      window.clearInterval(timer);
+    dipRef.current = 0;
+    applyVolume(DIP_TIME_CONSTANT);
+    const swap = window.setTimeout(() => {
+      audio.playbackRate = target;
+      boostRef.current = boostTarget;
+    }, DIP_SWAP_MS);
+    const back = window.setTimeout(() => {
       dipRef.current = 1;
-      applyVolume();
+      applyVolume(DIP_RETURN_CONSTANT);
+    }, DIP_RETURN_MS);
+    return () => {
+      window.clearTimeout(swap);
+      window.clearTimeout(back);
+      dipRef.current = 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intensity, unlocked]);

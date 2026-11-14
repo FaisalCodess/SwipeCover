@@ -2039,13 +2039,11 @@
   .menu-keys { gap: 7px; }
 
   .menu-level-stage {
-    --orbit-radius: var(--orbit-fit, clamp(48px, 18vw, 100px));
-    top: var(--stage-y, 25%);
-    left: 68%;
-    width: calc(var(--orbit-radius) * 2 + 120px);
+    --orbit-radius: clamp(48px, 18vw, 100px);
+    top: 25%;
+    left: 66%;
+    width: min(80vw, 340px);
   }
-
-  [data-tight] .menu-level-readout { display: none; }
 
   /* Little room inside the ring on a phone: smaller type, and the hint line goes. */
   .menu-level-readout { width: calc(var(--orbit-radius) * 2 - 46px); }

@@ -272,21 +272,6 @@
     padding: 0 12px;
     font-size: 10px;
   }
-
-  /* Short name and a narrow dropdown, so neither reaches the logo (which sits in a layer above). */
-  .menu-account-btn .menu-account-name { max-width: 8ch; }
-  .menu-account-menu {
-    min-width: 0;
-    width: min(184px, calc(100vw - 210px));
-    top: calc(100% + 6px);
-  }
-
-  .menu-account-menu button,
-  .menu-account-menu p {
-    font-size: 10px;
-    letter-spacing: .1em;
-    white-space: nowrap;
-  }
 }
 
 .auth-legal {
