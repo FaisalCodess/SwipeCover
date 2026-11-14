@@ -1,14 +1,45 @@
-import { Check, LoaderCircle, LogIn, TriangleAlert, WifiOff } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, LoaderCircle, LogIn, Share2, TriangleAlert, WifiOff } from 'lucide-react';
 import { BoardFrame, CutFrame, keyShape } from './MainMenu.jsx';
+import { shareResult } from './share.js';
 import './result.css';
 
 // A button in the game's cut-corner style (same shape as the MENU / UNDO chips).
-export function ResultButton({ children, onClick, primary = false, autoFocus = false, type = 'button' }) {
+export function ResultButton({ children, onClick, primary = false, autoFocus = false, type = 'button', className = '' }) {
   return (
-    <button type={type} className={`result-btn ${primary ? 'is-primary' : ''}`} onClick={onClick} autoFocus={autoFocus}>
+    <button type={type} className={`result-btn ${primary ? 'is-primary' : ''} ${className}`} onClick={onClick} autoFocus={autoFocus}>
       <CutFrame shape={keyShape} />
       <span className="result-btn-label">{children}</span>
     </button>
+  );
+}
+
+// Shares the result: the phone's share sheet on a touch screen, a copy to the clipboard elsewhere.
+const SHARE_LABELS = {
+  idle: [Share2, 'SHARE RESULT'],
+  shared: [Check, 'SHARED'],
+  copied: [Check, 'COPIED TO CLIPBOARD'],
+  failed: [Share2, 'COULD NOT SHARE'],
+};
+
+export function ShareButton({ text, url }) {
+  const [state, setState] = useState('idle');
+  const timer = useRef(0);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  async function press() {
+    const outcome = await shareResult(text, url, { sheet: window.matchMedia('(pointer: coarse)').matches });
+    if (outcome === 'cancelled') return;
+    setState(outcome);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setState('idle'), 2200);
+  }
+
+  const [Icon, label] = SHARE_LABELS[state];
+  return (
+    <ResultButton className="is-share" onClick={press}>
+      <Icon size={14} strokeWidth={1.8} /> {label}
+    </ResultButton>
   );
 }
 

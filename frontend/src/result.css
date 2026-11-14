@@ -266,6 +266,11 @@
   margin-top: 24px;
 }
 
+.result-actions .is-share {
+  grid-column: 1 / -1;
+  order: -1;
+}
+
 .result-btn {
   --edge: rgba(174, 198, 204, .5);
   position: relative;

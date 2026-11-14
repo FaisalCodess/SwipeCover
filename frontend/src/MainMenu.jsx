@@ -1011,7 +1011,7 @@ function AccountChip({ player, onLogin, onLogout, onRename, onDelete }) {
   );
 }
 
-export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, onRename, onDelete, onLegal, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], rush = { status: 'idle' }, status, error }) {
+export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, onRename, onDelete, onLegal, leaving = false, settings, onSettingsChange, levelScores = {}, player, completedLevels = [], rush = { status: 'idle' }, streak = 0, challenge = null, onDismissChallenge, status, error }) {
   // Which panel is showing ('settings' | 'leaderboard'), and whether it is folding away.
   const [panel, setPanel] = useState(null);
   const [panelClosing, setPanelClosing] = useState(false);
@@ -1238,6 +1238,16 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
     else togglePanel(action);
   }
 
+  // A friend's shared result stays up until this device has a run of its own on that level (or
+  // Swipe Rush) today; the result screen then shows how it compared.
+  const challengeDone = challenge?.kind === 'rush' ? rush.status === 'finished' : completedLevels.includes(challenge?.level);
+  const challengeBlocker = challenge?.kind === 'level' && !isOpen(challenge.level, completedLevels) ? blockerOf(challenge.level, completedLevels) : null;
+  const challengeAction = challengeBlocker ? `PLAY LEVEL ${challengeBlocker} FIRST` : 'BEAT IT';
+  function acceptChallenge() {
+    if (challenge.kind === 'rush') onRush();
+    else onPlay(challengeBlocker ?? challenge.level);
+  }
+
   // Boards are generated on the device, so this only lasts a moment after the page loads.
   const connecting = status !== 'ready';
 
@@ -1288,6 +1298,20 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
               );
             })}
           </nav>
+          {challenge && !challengeDone && (
+            <div className="menu-challenge">
+              <p><Swords size={11} strokeWidth={1.8} /> {(challenge.by || 'A FRIEND').toUpperCase()}'S CHALLENGE</p>
+              <strong>
+                {challenge.kind === 'level'
+                  ? `LEVEL ${challenge.level} · ${formatMenuTime(challenge.value)}`
+                  : `${challenge.value} ${challenge.value === 1 ? 'MAP' : 'MAPS'} IN SWIPE RUSH`}
+              </strong>
+              <span>
+                <button type="button" onClick={acceptChallenge}>{challengeAction}</button>
+                <button type="button" className="menu-challenge-close" onClick={onDismissChallenge} aria-label="Dismiss the challenge"><X size={13} strokeWidth={1.8} /></button>
+              </span>
+            </div>
+          )}
           {allCleared && (
             <p className="menu-countdown">
               <span>NEW PUZZLES IN</span>
@@ -1374,7 +1398,7 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
       <div className="menu-footer">
         <span><i /> {completedLevels.length} / 3 GAMES CLEARED TODAY</span>
         <span className="menu-footer-divider" />
-        <span>MOVE WITH INTENTION</span>
+        <span>{streak > 0 ? <><Flame size={10} strokeWidth={2} aria-hidden="true" /> {streak} DAY STREAK</> : 'MOVE WITH INTENTION'}</span>
         <span className="menu-footer-divider" />
         <span className="menu-footer-links">
           <button type="button" onClick={() => onLegal?.('privacy')}>PRIVACY</button>

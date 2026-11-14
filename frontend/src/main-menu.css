@@ -565,6 +565,77 @@
   letter-spacing: .08em;
 }
 
+.menu-challenge {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0 0 4px;
+  padding: 12px 14px;
+  border-left: 2px solid #ffb27a;
+  background: linear-gradient(90deg, rgba(60, 30, 18, .55), rgba(60, 30, 18, 0));
+  pointer-events: auto;
+}
+
+.menu-challenge p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: #ffb27a;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .2em;
+}
+
+.menu-challenge strong {
+  color: #f0f7f3;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: .06em;
+}
+
+.menu-challenge > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-challenge button {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 178, 122, .7);
+  background: rgba(255, 178, 122, .12);
+  color: #ffd9bd;
+  cursor: pointer;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .18em;
+}
+
+.menu-challenge button:hover,
+.menu-challenge button:focus-visible {
+  background: rgba(255, 178, 122, .28);
+  color: #fff;
+  outline: none;
+}
+
+.menu-challenge .menu-challenge-close {
+  display: grid;
+  width: 32px;
+  place-items: center;
+  padding: 0;
+  border-color: rgba(174, 198, 204, .35);
+  background: none;
+  color: rgba(204, 225, 219, .7);
+}
+
+.menu-footer > span:nth-child(3) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .menu-range {
   position: absolute;
   z-index: 0;

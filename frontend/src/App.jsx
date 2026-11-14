@@ -20,7 +20,9 @@ import SwipePad from './SwipePad.jsx';
 import { useSwipe } from './swipe.js';
 import Brand from './Brand.jsx';
 import './brand.css';
-import ResultDialog, { PracticeStrip, ResultButton, ResultStanding } from './ResultDialog.jsx';
+import ResultDialog, { PracticeStrip, ResultButton, ResultStanding, ShareButton } from './ResultDialog.jsx';
+import { challengeUrl, clearChallenge, readChallenge } from './share.js';
+import { currentStreak, markPlayed, readStreak } from './streak.js';
 import { paintDelay, slideDuration } from './motion.js';
 import './main-menu.css';
 import './game-view.css';
@@ -367,11 +369,28 @@ function rushVerdict(maps) {
   return 'Unreal.';
 }
 
-function WinDialog({ run, result, firstRun, globalResult, onJoin, onReplay, onNext, onHome, completedLevels }) {
+function WinDialog({ run, result, firstRun, globalResult, onJoin, onReplay, onNext, onHome, completedLevels, playerName, streak, challenge }) {
   const isLast = run.level >= LEVELS;
   const practice = !run.ranked;
   const stats = [{ label: 'MOVES', value: result.moves }];
   if (practice && firstRun) stats.push({ label: 'FIRST RUN', value: formatTime(firstRun.time) });
+  if (!practice && streak > 0) stats.push({ label: 'STREAK', value: `${streak} ${streak === 1 ? 'DAY' : 'DAYS'}` });
+  // A friend's challenge on this very level: how this run compares with their time.
+  const versus = challenge?.kind === 'level' && challenge.level === run.level && challenge.day === run.day ? challenge : null;
+  if (versus) {
+    const difference = result.time - versus.value;
+    stats.push({
+      label: `VS ${(versus.by || 'FRIEND').toUpperCase()}`,
+      value: difference === 0 ? 'TIED' : `${difference < 0 ? '-' : '+'}${(Math.abs(difference) / 1000).toFixed(2)}S`,
+    });
+  }
+  const shareText = [
+    `Swipe Cover · Level ${run.level}/${LEVELS}`,
+    `⏱ ${formatTime(result.time)} · ${result.moves} ${result.moves === 1 ? 'move' : 'moves'}`,
+    streak >= 2 ? `🔥 ${streak}-day streak` : null,
+    'Can you beat it?',
+  ].filter(Boolean).join('\n');
+  const shareLink = challengeUrl({ kind: 'level', level: run.level, value: Math.round(result.time), day: run.day, by: playerName });
   return (
     <ResultDialog
       tone="level"
@@ -386,6 +405,7 @@ function WinDialog({ run, result, firstRun, globalResult, onJoin, onReplay, onNe
         : <ResultStanding label={`Level ${run.level}`} globalResult={globalResult} onLogin={onJoin} />}
       actions={(
         <>
+          <ShareButton text={shareText} url={shareLink} />
           <ResultButton onClick={onReplay}><RotateCcw size={14} strokeWidth={1.6} /> PLAY AGAIN</ResultButton>
           {isLast
             ? <ResultButton primary autoFocus onClick={onHome}><Trophy size={14} strokeWidth={1.6} /> MENU</ResultButton>
@@ -399,11 +419,23 @@ function WinDialog({ run, result, firstRun, globalResult, onJoin, onReplay, onNe
 
 // What the player gets when the five minutes are up: boards cleared, then either the usual
 // leaderboard standing (a first run) or a note that a replay is just for fun.
-function RushResults({ result, first, globalResult, onJoin, onReplay, onHome }) {
+function RushResults({ result, day, first, globalResult, onJoin, onReplay, onHome, playerName, challenge }) {
   const practice = !result.ranked;
   const stats = [{ label: 'MOVES', value: result.moves }];
   if (result.maps > 0) stats.push({ label: 'LAST CLEAR', value: formatTime(result.time) });
   if (practice && first) stats.push({ label: 'FIRST RUN', value: `${first.maps} ${first.maps === 1 ? 'MAP' : 'MAPS'}` });
+  const versus = challenge?.kind === 'rush' && challenge.day === day ? challenge : null;
+  if (versus) {
+    const difference = result.maps - versus.value;
+    stats.push({
+      label: `VS ${(versus.by || 'FRIEND').toUpperCase()}`,
+      value: difference === 0 ? 'TIED' : `${difference > 0 ? '+' : '-'}${Math.abs(difference)} ${Math.abs(difference) === 1 ? 'MAP' : 'MAPS'}`,
+    });
+  }
+  const shareText = `Swipe Cover · Swipe Rush
+⚡ ${result.maps} ${result.maps === 1 ? 'map' : 'maps'} in 5 minutes
+Can you beat it?`;
+  const shareLink = challengeUrl({ kind: 'rush', value: Math.max(1, result.maps), day, by: playerName });
   return (
     <ResultDialog
       tone="rush"
@@ -417,6 +449,7 @@ function RushResults({ result, first, globalResult, onJoin, onReplay, onHome }) 
         : <ResultStanding label="Swipe Rush" globalResult={globalResult} onLogin={onJoin} />}
       actions={(
         <>
+          {result.maps > 0 && <ShareButton text={shareText} url={shareLink} />}
           <ResultButton onClick={onReplay}><RotateCcw size={14} strokeWidth={1.6} /> PLAY AGAIN</ResultButton>
           <ResultButton primary autoFocus onClick={onHome}><Trophy size={14} strokeWidth={1.6} /> MENU</ResultButton>
         </>
@@ -491,6 +524,8 @@ export default function App() {
     return saved ? { id: saved.user.id, name: saved.user.username } : { id: null, name: null };
   });
   const [accountDialog, setAccountDialog] = useState(null); // 'rename' | 'delete' | null
+  const [challenge, setChallenge] = useState(readChallenge); // a friend's shared result to beat, or null
+  const [streakState, setStreakState] = useState(readStreak);
   const [legal, setLegal] = useState(LEGAL_LINK); // null, 'privacy' or 'terms': the document being read
   // null, or { reason } while the login dialog is open.
   const [showAuth, setShowAuth] = useState(null);
@@ -554,6 +589,7 @@ export default function App() {
   leaderboardRef.current = leaderboard;
 
   const todaysScores = leaderboard[dayKey]?.levels || {};
+  const streak = currentStreak(streakState, dayKey);
   const completedLevels = LEVEL_NUMBERS.filter((level) => todaysScores[level]?.length > 0);
 
   // True once a level's first run has been finished that day. Every run after that is practice.
@@ -935,7 +971,10 @@ export default function App() {
     showBanner('time');
     sfx('timeUp');
     vibrate([30, 40, 30, 40, 90]);
-    if (current.ranked) submitRushRun(current.day, outcome);
+    if (current.ranked) {
+      submitRushRun(current.day, outcome);
+      setStreakState((previous) => markPlayed(previous, current.day));
+    }
     later(() => {
       setBanner(null);
       changePhase('rushDone');
@@ -1278,6 +1317,7 @@ export default function App() {
     // runs leave no trace.
     if (completed.ranked) {
       saveFirstRun(completed.day, completed.level, time, completed.moves, completed.route);
+      setStreakState((previous) => markPlayed(previous, completed.day));
       clearAttempt(completed.day, completed.level);
       submitGlobal(completed, time);
     }
@@ -1633,6 +1673,9 @@ export default function App() {
           player={player}
           completedLevels={completedLevels}
           rush={rushInfo}
+          streak={streak}
+          challenge={challenge?.day === dayKey ? challenge : null}
+          onDismissChallenge={() => { clearChallenge(); setChallenge(null); }}
           status={daily.status}
           error={storageError}
         />
@@ -1723,6 +1766,9 @@ export default function App() {
           onNext={() => { if (!startLevel(run.level + 1)) goHome(); }}
           onHome={goHome}
           completedLevels={completedLevels}
+          playerName={player.name}
+          streak={streak}
+          challenge={challenge}
         />
       )}
 
@@ -1738,6 +1784,9 @@ export default function App() {
       {screen === 'rush' && !travel && rushRun && phase === 'rushDone' && !rush?.versus && result?.mode === 'rush' && (
         <RushResults
           result={result}
+          day={rushRun.day}
+          playerName={player.name}
+          challenge={challenge}
           first={rushInfo.status === 'finished' ? rushInfo.result : null}
           globalResult={globalResult}
           onJoin={() => openAuth('Log in to post your score')}

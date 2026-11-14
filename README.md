@@ -157,6 +157,22 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
   the server can rebuild exactly the boards a player saw. Change a tier in both files
   and keep the parity test green.
 
+## Sharing, streaks and challenges
+
+- Every result screen has **SHARE RESULT**: the phone's share sheet on a touch screen, a copy
+  to the clipboard on a computer. The text carries a link such as
+  `/?ch=level&n=2&v=9440&d=2026-11-14&by=Sam` (`ch` is `level` or `rush`, `v` the time in ms or
+  the number of maps, `d` the day, `by` the sender's name). `frontend/src/share.js` checks it,
+  removes it from the address bar and keeps it in `sessionStorage`.
+- Opening such a link shows "Sam's challenge" on the menu, and the result screen after the
+  player's own run says how they did against it. A challenge only counts on the day it was set,
+  because the puzzles change at midnight; an older link is ignored.
+- The menu footer shows a **day streak**: days in a row with a first run done (a daily level or
+  Swipe Rush). It is kept in `localStorage` on the device (`frontend/src/streak.js`).
+- Link previews (WhatsApp, Discord, X) use `frontend/public/og.jpg` and the `og:` tags in
+  `frontend/index.html`. Those tags hold the full address of the site, so change them when the
+  domain changes.
+
 ## Accounts
 
 - **Log in / sign up** is the button at the top right of the menu. A player can sign up with
