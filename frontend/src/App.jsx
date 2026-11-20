@@ -69,7 +69,7 @@ import LegalDialog from './LegalDialog.jsx';
 import VersusLobby from './VersusLobby.jsx';
 import { VersusClient } from './versusClient.js';
 import './versus.css';
-import { beginTrip, trackOrigin } from './uiMotion.jsx';
+import { beginTrip } from './uiMotion.jsx';
 
 const STORAGE_KEY = 'swipe-cover-save-v2';
 // How long a trip takes is chosen per trip (see beginTrip in uiMotion.jsx) and shared with the CSS
@@ -774,9 +774,6 @@ export default function App() {
     scheduleDailyReset();
     return () => window.clearTimeout(timer);
   }, []);
-
-  // Remembers what was pressed last, so a dialog can grow out of it.
-  useEffect(() => trackOrigin(), []);
 
   // While the camera is travelling, a tap or a key press speeds it up.
   useEffect(() => {

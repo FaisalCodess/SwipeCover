@@ -1,7 +1,7 @@
 // Small helpers behind the interface's motion (see motion-system.css for the look of it):
-// where a dialog grows from, how it leaves, numbers that count up, and a burst of confetti.
+// numbers that count up, a burst of confetti, and the length of trips between screens.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
 export function reducedMotion() {
@@ -9,74 +9,6 @@ export function reducedMotion() {
 }
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
-
-// ---------- Origin awareness ----------
-// A dialog should grow out of the thing that was pressed to open it, and shrink back into it.
-// The last press is remembered here (a tap or click, or the centre of the focused button for
-// Enter and Space) so a dialog can read it when it appears.
-
-let lastPress = null;
-
-export function trackOrigin() {
-  const remember = (x, y) => { lastPress = { x, y, at: performance.now() }; };
-  const onPointer = (event) => remember(event.clientX, event.clientY);
-  const onKey = (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    const element = document.activeElement;
-    if (!element || element === document.body) return;
-    const box = element.getBoundingClientRect();
-    remember(box.left + box.width / 2, box.top + box.height / 2);
-  };
-  window.addEventListener('pointerdown', onPointer, true);
-  window.addEventListener('keydown', onKey, true);
-  return () => {
-    window.removeEventListener('pointerdown', onPointer, true);
-    window.removeEventListener('keydown', onKey, true);
-  };
-}
-
-// Sets --from-x and --from-y on a dialog's panel: how far, from its centre, the press that opened
-// it was. With no recent press (a dialog the game opened by itself) it simply rises from below.
-export function useDialogOrigin(ref) {
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    const press = lastPress && performance.now() - lastPress.at < 1500 ? lastPress : null;
-    let fromX = 0;
-    let fromY = 28;
-    if (press) {
-      // Dialogs are centred on the screen, and measuring the panel now would include its first
-      // animation frame, so the screen's own centre is the reference.
-      fromX = clamp(press.x - window.innerWidth / 2, -element.offsetWidth * 0.6, element.offsetWidth * 0.6);
-      fromY = clamp(press.y - window.innerHeight / 2, -element.offsetHeight * 0.6, element.offsetHeight * 0.6);
-    }
-    element.style.setProperty('--from-x', `${Math.round(fromX)}px`);
-    element.style.setProperty('--from-y', `${Math.round(fromY)}px`);
-  }, [ref]);
-}
-
-// Closing is quicker than opening (about 60%), and runs back along the way it came. Returns
-// `[closing, close]`: put `is-closing` on the overlay and the panel while `closing`, and call
-// `close()` where `onClose()` was called. Doing it twice is harmless.
-export const DIALOG_EXIT_MS = 170;
-
-export function useDialogExit(onClose) {
-  const [closing, setClosing] = useState(false);
-  const timer = useRef(0);
-  const latest = useRef(onClose);
-  latest.current = onClose;
-  useEffect(() => () => window.clearTimeout(timer.current), []);
-  const close = useCallback(() => {
-    if (timer.current) return;
-    if (reducedMotion()) {
-      latest.current();
-      return;
-    }
-    setClosing(true);
-    timer.current = window.setTimeout(() => latest.current(), DIALOG_EXIT_MS);
-  }, []);
-  return [closing, close];
-}
 
 // ---------- Numbers that count up ----------
 // Ends exactly on `to`, slowing as it arrives (slow out), then flares once as it lands. A screen

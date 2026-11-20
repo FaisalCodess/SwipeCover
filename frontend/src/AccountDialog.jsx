@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useDialogExit, useDialogOrigin } from './uiMotion.jsx';
+import { useEffect, useState } from 'react';
 import { LoaderCircle, TriangleAlert, X } from 'lucide-react';
 import { BoardFrame } from './MainMenu.jsx';
 import { ResultButton } from './ResultDialog.jsx';
@@ -11,9 +10,6 @@ import './auth.css';
 // Change username, or delete the account. Deleting asks the player to type their username (and their
 // password, if the account has one) so it cannot happen by a stray click.
 export default function AccountDialog({ mode, player, onClose, onRenamed, onDeleted }) {
-  const [closing, close] = useDialogExit(onClose);
-  const panel = useRef(null);
-  useDialogOrigin(panel);
   const [username, setUsername] = useState(mode === 'rename' ? player.name : '');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -23,11 +19,11 @@ export default function AccountDialog({ mode, player, onClose, onRenamed, onDele
 
   useEffect(() => {
     const onKey = (event) => {
-      if (event.key === 'Escape') close();
+      if (event.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [close]);
+  }, [onClose]);
 
   async function submit(event) {
     event.preventDefault();
@@ -36,7 +32,7 @@ export default function AccountDialog({ mode, player, onClose, onRenamed, onDele
     if (!deleting) {
       const cleaned = cleanName(username);
       if (!cleaned) return setError('Usernames are 3-16 letters, numbers, spaces, _ or -.');
-      if (cleaned === player.name) return close();
+      if (cleaned === player.name) return onClose();
     }
     setBusy(true);
     try {
@@ -54,10 +50,10 @@ export default function AccountDialog({ mode, player, onClose, onRenamed, onDele
   }
 
   return (
-    <div className={`result-overlay auth-overlay fade-in ${closing ? 'is-closing' : ''}`} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
-      <section ref={panel} className={`result-panel auth-panel pop-in ${deleting ? 'is-rush' : 'is-level'} ${closing ? 'is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="account-title">
+    <div className="result-overlay auth-overlay fade-in" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className={`result-panel auth-panel pop-in ${deleting ? 'is-rush' : 'is-level'}`} role="dialog" aria-modal="true" aria-labelledby="account-title">
         <BoardFrame />
-        <button type="button" className="auth-close" onClick={close} aria-label="Close"><X size={16} strokeWidth={1.6} /></button>
+        <button type="button" className="auth-close" onClick={onClose} aria-label="Close"><X size={16} strokeWidth={1.6} /></button>
         <form className="result-body auth-body" onSubmit={submit} noValidate>
           <p className="result-kicker">{deleting ? 'THIS CANNOT BE UNDONE' : 'YOUR ACCOUNT'}</p>
           <h2 id="account-title" className="result-title">{deleting ? 'Delete account' : 'Change username'}</h2>

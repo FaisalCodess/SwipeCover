@@ -14,10 +14,9 @@
                       tick with a squash; the ball already does (ballEngine.js).
    Exaggeration ..... the big moments are bigger than the small ones: hero number, GO!, TIME'S UP,
                       a win's frame bump, confetti.
-   Arcs ............. dialogs, the +1, confetti and the logo's glide move on curved paths: the two
+   Arcs ............. the +1, confetti and the logo's glide move on curved paths: the two
                       axes run on different easings.
    Staggering ....... the menu, its orbs, the result panel and its cells arrive one after another.
-   Origin awareness . dialogs grow out of what opened them (--from-x / --from-y, uiMotion.jsx).
    Rubber banding ... the board follows a finger with resistance and springs back (App.jsx), the
                       swipe pad leans (swipe-pad.css), dialogs overshoot.
    Secondary action . a map clear flies a +1 to the score, and the counters tick.
@@ -50,42 +49,6 @@
 }
 
 /* ============================== Dialogs ============================== */
-
-/* A dialog grows out of what was pressed (--from-x / --from-y, set in uiMotion.jsx). Sideways it
-   moves on one curve and up-and-down on another, which bends the path into an arc, and it
-   overshoots a little before it settles. */
-.pop-in {
-  animation: dialog-x .46s var(--ease-inout) backwards, dialog-pop .54s linear both;
-}
-
-@keyframes dialog-x {
-  from { translate: var(--from-x, 0px) 0; }
-}
-
-@keyframes dialog-pop {
-  0% { opacity: 0; transform: translateY(var(--from-y, 28px)) scale(.62); animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
-  58% { opacity: 1; transform: translateY(-5px) scale(1.04); animation-timing-function: cubic-bezier(.4, 0, .3, 1); }
-  80% { transform: translateY(1px) scale(.994); animation-timing-function: ease-out; }
-  100% { opacity: 1; transform: none; }
-}
-
-/* Leaving runs the same path backwards, faster. */
-.result-overlay.fade-in.is-closing {
-  animation: fade-out .17s var(--ease-in) both;
-}
-
-.result-panel.pop-in.is-closing {
-  animation: dialog-out-x .17s var(--ease-in) both, dialog-out .17s var(--ease-in) both;
-}
-
-@keyframes dialog-out-x {
-  to { translate: var(--from-x, 0px) 0; }
-}
-
-@keyframes dialog-out {
-  from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateY(var(--from-y, 28px)) scale(.7); }
-}
 
 /* The panel's contents arrive in order, from below, one after another. */
 .result-item {
@@ -174,11 +137,6 @@
   height: 40px;
   font-size: 10px;
   color: rgba(222, 240, 236, .72);
-}
-
-/* The log in window keeps the game's original, simple pop: a short fade and grow from the middle. */
-.login-panel.pop-in {
-  animation: pop-in .34s cubic-bezier(.2, .8, .25, 1.05) both;
 }
 
 /* Privacy and Terms are documents, not a reward: they fade in and settle a few pixels, with no travel
@@ -701,11 +659,6 @@
   100% { opacity: 1; transform: none; }
 }
 
-/* The pause cover opens from the middle of the board it covers. */
-.board-pause-cover > div {
-  animation: dialog-pop .42s linear both;
-}
-
 /* ============================== Touch screens ============================== */
 
 /* Fitts's law: a finger needs about 44px. Small controls get an invisible border of extra target. */
@@ -771,12 +724,8 @@
 /* ============================== Reduced motion ============================== */
 
 @media (prefers-reduced-motion: reduce) {
-  .pop-in,
-  .login-panel.pop-in,
   .legal-panel.pop-in,
   .legal-panel.pop-in.is-closing,
-  .result-panel.pop-in.is-closing,
-  .result-overlay.fade-in.is-closing,
   .result-item,
   .result-stats > div,
   .result-hero strong .count-up.is-landed,
@@ -803,8 +752,7 @@
   .game-board-frame[data-phase],
   .rush-board-in,
   .rush-score b,
-  .rush-banner span,
-  .board-pause-cover > div {
+  .rush-banner span {
     animation: none;
   }
 
