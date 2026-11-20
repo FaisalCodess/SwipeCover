@@ -784,21 +784,17 @@ function LeaderboardContent({ levelScores, player, rush, start = 'daily' }) {
             )}
           </div>
         )}
-        {!entries.length && (board?.status === 'ready' || board?.status === 'offline') && (
+        {!entries.length && (
           <div className="menu-board-empty">
-            <span>{emptyTitle}</span>
-            <p>{emptyText}</p>
+            {board?.status === 'ready' || board?.status === 'offline' ? (
+              <>
+                <span>{emptyTitle}</span>
+                <p>{emptyText}</p>
+              </>
+            ) : (
+              <span className="menu-board-loading"><LoaderCircle className="menu-spin" size={15} /> LOADING</span>
+            )}
           </div>
-        )}
-        {/* While the answer is on its way the list already has its shape, so the panel responds at
-            once and the wait reads as progress, not as nothing happening. */}
-        {!entries.length && !(board?.status === 'ready' || board?.status === 'offline') && (
-          <>
-            <ol className="menu-board-skeleton" aria-hidden="true">
-              {Array.from({ length: 9 }, (_, index) => <li key={index} style={{ '--k': index }}><i /><b /><u /></li>)}
-            </ol>
-            <span className="sr-only" role="status">Loading</span>
-          </>
         )}
       </div>
 

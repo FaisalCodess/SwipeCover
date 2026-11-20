@@ -26,8 +26,7 @@
                       sit apart and quieter; results lead with one big button.
    Fitts's law ...... touch targets are at least 44px (invisible padding), and the main button of a
                       dialog is the widest and tallest.
-   Doherty threshold  every press answers within a frame; waiting shows a shape (skeleton rows)
-                      straight away; a trip can be skipped.
+   Doherty threshold  every press answers within a frame; a trip can be skipped.
    Frequency of use . what happens all the time is quiet and quick (ticks, tile paints, board
                       swaps, later trips); what happens rarely gets the flourish.
    Interruptible .... transitions (not keyframes) wherever something can be reversed; a trip
@@ -468,55 +467,6 @@
   animation: none;
 }
 
-/* The leaderboard answers at once: the rows are drawn as shapes while the real ones are fetched. */
-.menu-board-skeleton {
-  position: relative;
-  display: grid;
-  gap: 5px;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  list-style: none;
-}
-
-.menu-board-skeleton li {
-  display: grid;
-  height: 40px;
-  grid-template-columns: 22px 1fr 64px;
-  align-items: center;
-  gap: 14px;
-  padding: 0 12px;
-  background: rgba(36, 104, 112, .1);
-  animation: skeleton-in .32s var(--ease-out) both;
-  animation-delay: calc(var(--k, 0) * 28ms);
-}
-
-.menu-board-skeleton li > * {
-  display: block;
-  height: 9px;
-  background: rgba(174, 198, 204, .16);
-  text-decoration: none;
-}
-
-.menu-board-skeleton li > b { width: 70%; }
-
-.menu-board-skeleton::after {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 30%, rgba(190, 255, 240, .1) 50%, transparent 70%);
-  content: '';
-  animation: skeleton-sweep 1.4s var(--ease-inout) infinite;
-}
-
-@keyframes skeleton-in {
-  from { opacity: 0; transform: translateY(6px); }
-}
-
-@keyframes skeleton-sweep {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(100%); }
-}
-
 /* ============================== In the game ============================== */
 
 /* Numbers tick when they change: a small squash and a settle, quiet enough for every move. */
@@ -715,10 +665,6 @@
   .game-board-frame[data-phase="celebrating"] .cut-frame-line {
     filter: none;
   }
-
-  .menu-board-skeleton::after {
-    animation-duration: 1.8s;
-  }
 }
 
 /* ============================== Reduced motion ============================== */
@@ -744,8 +690,6 @@
   .menu-streak-plus,
   .menu-account-menu,
   .menu-account-menu > *,
-  .menu-board-skeleton li,
-  .menu-board-skeleton::after,
   .count-tick,
   .game-status-dots i.is-low,
   .board-grid.is-last-few .board-tile.is-open::before,
