@@ -631,116 +631,82 @@
 }
 
 .menu-streak {
-  --edge: rgba(255, 178, 122, .65);
   --flame-low: #ff5a2a;
   --flame-high: #ffb25a;
   --flame-core: #fff2c9;
   --flame-glow: 255, 120, 50;
   position: relative;
   display: grid;
-  width: min(100%, 290px);
+  width: fit-content;
+  min-width: 180px;
   justify-self: start;
-  grid-template-columns: 38px 1fr auto;
-  grid-template-rows: auto auto auto;
+  grid-template-columns: 30px auto;
   column-gap: 12px;
   align-items: center;
   margin: 22px 0 0 4px;
-  padding: 12px 20px 12px 14px;
+  padding: 10px 22px 10px 14px;
   border: 0;
-  background: none;
+  border-left: 2px solid rgb(var(--flame-glow));
+  background: linear-gradient(90deg, rgba(var(--flame-glow), .16), rgba(var(--flame-glow), 0) 92%);
   color: #ffd9bd;
   text-align: left;
   cursor: pointer;
   font-family: 'Space Grotesk', sans-serif;
   pointer-events: auto;
-}
-
-.menu-streak[data-tier="1"] { --flame-low: #ff3d1f; --flame-high: #ffc34d; --flame-glow: 255, 140, 40; }
-.menu-streak[data-tier="2"] { --edge: rgba(255, 214, 120, .8); --flame-low: #ff9a1f; --flame-high: #ffe27a; --flame-core: #ffffff; --flame-glow: 255, 200, 70; }
-.menu-streak[data-tier="3"] { --edge: rgba(120, 245, 220, .85); --flame-low: #1fb8d6; --flame-high: #7dffe0; --flame-core: #ffffff; --flame-glow: 78, 243, 208; }
-
-.menu-streak .cut-frame-fill {
-  background: linear-gradient(100deg, rgba(var(--flame-glow), .2), rgba(var(--flame-glow), .04) 70%);
   transition: background .2s;
 }
 
-.menu-streak:hover .cut-frame-fill,
-.menu-streak:focus-visible .cut-frame-fill {
-  background: linear-gradient(100deg, rgba(var(--flame-glow), .34), rgba(var(--flame-glow), .08) 70%);
+.menu-streak[data-tier="1"] { --flame-low: #ff3d1f; --flame-high: #ffc34d; --flame-glow: 255, 140, 40; }
+.menu-streak[data-tier="2"] { --flame-low: #ff9a1f; --flame-high: #ffe27a; --flame-core: #ffffff; --flame-glow: 255, 200, 70; }
+.menu-streak[data-tier="3"] { --flame-low: #1fb8d6; --flame-high: #7dffe0; --flame-core: #ffffff; --flame-glow: 78, 243, 208; }
+
+.menu-streak:hover,
+.menu-streak:focus-visible {
+  background: linear-gradient(90deg, rgba(var(--flame-glow), .28), rgba(var(--flame-glow), 0) 92%);
 }
 
 .menu-streak:focus-visible { outline: none; }
-.menu-streak > :not(.cut-frame) { position: relative; }
 
 .menu-streak-flame {
-  grid-row: 1 / span 2;
-  width: 38px;
-  height: 48px;
+  width: 26px;
+  height: 33px;
   overflow: visible;
-  filter: drop-shadow(0 0 8px rgba(var(--flame-glow), .75));
+  filter: drop-shadow(0 0 6px rgba(var(--flame-glow), .7));
   transform-origin: 50% 90%;
   animation: streak-flicker 1.7s ease-in-out infinite;
 }
 
 .menu-streak .flame-inner { fill: var(--flame-core); opacity: .9; }
 
+/* The number and its label share one line, so the whole chip is a single glance. */
 .menu-streak-count {
-  display: grid;
-  justify-items: start;
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   line-height: 1;
 }
 
 .menu-streak-count strong {
   color: #fff;
-  font-size: 30px;
+  font-size: 26px;
   font-weight: 600;
   letter-spacing: .02em;
-  text-shadow: 0 0 18px rgba(var(--flame-glow), .6);
+  text-shadow: 0 0 16px rgba(var(--flame-glow), .55);
 }
 
 .menu-streak-count small {
-  margin-top: 5px;
-  color: rgba(255, 226, 200, .85);
+  color: rgba(255, 226, 200, .8);
   font-size: 9px;
   font-weight: 700;
-  letter-spacing: .26em;
+  letter-spacing: .24em;
 }
 
-.menu-streak-open {
-  justify-self: end;
-  align-self: start;
-  opacity: .55;
-  transition: opacity .2s, transform .2s;
-}
-
-.menu-streak:hover .menu-streak-open { opacity: 1; transform: translate(2px, -2px); }
-
-.menu-streak-pips {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.menu-streak-pips i {
-  position: relative;
-  width: 26px;
-  height: 5px;
-  background: rgba(255, 226, 200, .14);
-  clip-path: polygon(3px 0, 100% 0, calc(100% - 3px) 100%, 0 100%);
-}
-
-.menu-streak-pips i.is-lit {
-  background: linear-gradient(90deg, var(--flame-low), var(--flame-high));
-  box-shadow: 0 0 8px rgba(var(--flame-glow), .8);
-}
-
-.menu-streak-pips i.is-today { animation: streak-today 1.4s ease-in-out infinite; }
-
+/* Only said when it needs saying. */
 .menu-streak-note {
-  grid-column: 1 / -1;
-  margin-top: 9px;
-  color: rgba(255, 226, 200, .6);
+  grid-column: 2 / -1;
+  margin-top: 6px;
+  color: #ffbf8a;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: .22em;
@@ -753,15 +719,8 @@
   80% { transform: scale(.98, 1.04) skewX(-1deg); }
 }
 
-@keyframes streak-today {
-  0%, 100% { background: rgba(255, 226, 200, .14); box-shadow: none; }
-  50% { background: rgba(var(--flame-glow), .75); box-shadow: 0 0 10px rgba(var(--flame-glow), .9); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .menu-streak-flame,
-  .menu-streak-pips i.is-today { animation: none; }
-  .menu-streak-pips i.is-today { background: rgba(var(--flame-glow), .55); }
+  .menu-streak-flame { animation: none; }
 }
 
 .menu-range {
@@ -1725,7 +1684,7 @@
   left: clamp(300px, 27vw, 480px);
   width: clamp(420px, 31vw, 520px);
   transform-origin: 0 var(--fold-top);
-  animation: settings-unfold .5s .3s cubic-bezier(.2, .75, .25, 1) both;
+  animation: settings-unfold .5s var(--resume-delay, .3s) cubic-bezier(.2, .75, .25, 1) both;
 }
 
 .menu-panel.is-closing {
@@ -2179,7 +2138,7 @@
     width: auto;
     max-width: none;
     margin: 0;
-    animation: sheet-in .32s cubic-bezier(.2, .75, .25, 1) both;
+    animation: sheet-in .32s var(--resume-delay, 0s) cubic-bezier(.2, .75, .25, 1) both;
   }
 
   .menu-panel.is-closing { animation: sheet-out .2s ease-in both; }

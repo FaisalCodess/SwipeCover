@@ -149,6 +149,13 @@ def test_the_streak_leaderboard_counts_days_in_a_row(tmp_path):
     assert [e["you"] for e in board["entries"]] == [False, False, True, False]
     assert board["total"] == 4 and board["you"] is None
 
+    # A player's own streak is counted the same way, so the menu and the leaderboard always agree.
+    for player, expected in (("ann", (3, True)), ("bo", (1, True)), ("cy", (2, False)), ("di", (1, True)), ("ed", (0, False)), ("nobody", (0, False))):
+        own = store.player_streak(today, player)
+        assert (own["streak"], own["played_today"]) == expected, player
+        listed = next((e["streak"] for e in board["entries"] if e["name"].lower() == player), 0)
+        assert own["streak"] == listed
+
 
 def test_the_streak_leaderboard_lists_up_to_100_and_adds_you_below(client, signup, monkeypatch):
     monkeypatch.setattr(main, "STREAK_START", "")

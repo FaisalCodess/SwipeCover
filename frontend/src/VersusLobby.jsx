@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useDialogExit, useDialogOrigin } from './uiMotion.jsx';
 import { Check, Copy, LoaderCircle, TriangleAlert, Users, X, Zap } from 'lucide-react';
 import { BoardFrame } from './MainMenu.jsx';
 import { ResultButton } from './ResultDialog.jsx';
@@ -7,7 +8,7 @@ import './versus.css';
 
 const MATCH_RULES = 'SAME BOARDS FOR BOTH · MOST MAPS WINS';
 // How long a friend match can last, in seconds. A quick match is always three minutes (server).
-const FRIEND_LENGTHS = [60, 180, 300];
+const FRIEND_LENGTHS = [60, 180];
 const DEFAULT_LENGTH = 180;
 
 const minutes = (seconds) => `${seconds / 60} MIN`;
@@ -15,6 +16,9 @@ const minutes = (seconds) => `${seconds / 60} MIN`;
 // Before a 1v1: a quick match, or a friend match with a code. `lobby.status` says where
 // it is: connecting, menu (choose), searching (in a queue), room (waiting for a friend), offline.
 export default function VersusLobby({ lobby, onQueue, onCreate, onJoin, onCancel, onClose, onRetry }) {
+  const [closing, close] = useDialogExit(onClose);
+  const panel = useRef(null);
+  useDialogOrigin(panel);
   const [code, setCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [length, setLength] = useState(DEFAULT_LENGTH);
@@ -22,11 +26,11 @@ export default function VersusLobby({ lobby, onQueue, onCreate, onJoin, onCancel
 
   useEffect(() => {
     const onKey = (event) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') close();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [close]);
 
   async function copyCode() {
     try {
@@ -45,7 +49,7 @@ export default function VersusLobby({ lobby, onQueue, onCreate, onJoin, onCancel
     body = (
       <>
         <p className="result-status is-rejected"><TriangleAlert size={14} /> CAN&apos;T REACH THE 1V1 SERVER</p>
-        <div className="result-actions"><ResultButton onClick={onClose}>CLOSE</ResultButton><ResultButton primary onClick={onRetry}>TRY AGAIN</ResultButton></div>
+        <div className="result-actions"><ResultButton onClick={close}>CLOSE</ResultButton><ResultButton primary onClick={onRetry}>TRY AGAIN</ResultButton></div>
       </>
     );
   } else if (status === 'searching') {
@@ -120,10 +124,10 @@ export default function VersusLobby({ lobby, onQueue, onCreate, onJoin, onCancel
   }
 
   return (
-    <div className="result-overlay auth-overlay fade-in" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="result-panel versus-panel pop-in is-rush" role="dialog" aria-modal="true" aria-labelledby="versus-title">
+    <div className={`result-overlay auth-overlay fade-in ${closing ? 'is-closing' : ''}`} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <section ref={panel} className={`result-panel versus-panel pop-in is-rush ${closing ? 'is-closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="versus-title">
         <BoardFrame />
-        <button type="button" className="auth-close" onClick={onClose} aria-label="Close"><X size={16} strokeWidth={1.6} /></button>
+        <button type="button" className="auth-close" onClick={close} aria-label="Close"><X size={16} strokeWidth={1.6} /></button>
         <div className="result-body versus-body">
           <p className="result-kicker">SWIPE RUSH</p>
           <h2 id="versus-title" className="result-title">1 v 1</h2>

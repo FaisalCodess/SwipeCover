@@ -7,7 +7,7 @@
   --word: clamp(18px, 2vw, 27px);
   --brand-delay: 0s;
   /* Same curve as the glide (see game-view.css); size changes ride along with the move. */
-  transition: top 1.7s cubic-bezier(.65, 0, .2, 1), left 1.7s cubic-bezier(.65, 0, .2, 1);
+  transition: top var(--travel, 1.7s) cubic-bezier(.65, 0, .2, 1), left var(--travel, 1.7s) cubic-bezier(.4, 0, .12, 1);
 }
 
 /* Big on the menu, compact in the game. The sizes below are transitioned, so the logo
@@ -19,7 +19,7 @@
 
 .shared-brand.is-down,
 .shared-brand.is-rise {
-  --brand-delay: .35s;
+  --brand-delay: var(--travel-delay, .35s);
 }
 
 .shared-brand.to-game .brand-tag {
@@ -51,8 +51,8 @@
   overflow: visible;
   filter: drop-shadow(0 0 calc(var(--mark) * .2) rgba(78, 243, 208, .3));
   transition:
-    width 1.7s cubic-bezier(.65, 0, .2, 1) var(--brand-delay),
-    height 1.7s cubic-bezier(.65, 0, .2, 1) var(--brand-delay),
+    width var(--travel, 1.7s) cubic-bezier(.65, 0, .2, 1) var(--brand-delay),
+    height var(--travel, 1.7s) cubic-bezier(.65, 0, .2, 1) var(--brand-delay),
     filter .3s ease,
     transform .3s ease;
 }
@@ -131,7 +131,7 @@
   gap: .55em;
   padding-bottom: calc(var(--word) * .28);
   font-size: var(--word);
-  transition: font-size 1.7s cubic-bezier(.65, 0, .2, 1) var(--brand-delay);
+  transition: font-size var(--travel, 1.7s) cubic-bezier(.65, 0, .2, 1) var(--brand-delay);
 }
 
 /* A line under the streak that only the menu shows: it fills the space under the logo. */

@@ -166,7 +166,7 @@ export default function AuthDialog({ reason, onClose, onSuccess, onLegal }) {
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <section className="result-panel auth-panel pop-in is-level" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <section className="result-panel auth-panel login-panel pop-in is-level" role="dialog" aria-modal="true" aria-labelledby="auth-title">
         <BoardFrame />
         <button type="button" className="auth-close" onClick={onClose} aria-label="Close">
           <X size={16} strokeWidth={1.6} />

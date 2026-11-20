@@ -172,7 +172,7 @@ def test_rejects_impossible_times_old_days_and_oversized_runs(client, signup, ro
 
 def test_ranks_by_boards_cleared_then_by_who_got_there_sooner(client, signup, routes):
     me = signup("Me Myself")
-    entries = [("Slow Six", 6, 200000), ("Fast Six", 6, 150000), ("Seven Up", 7, 290000), ("Me Myself", 4, 100000)]
+    entries = [("Slow Six", 6, 150000), ("Fast Six", 6, 120000), ("Seven Up", 7, 175000), ("Me Myself", 4, 100000)]
     for name, count, time_ms in entries:
         who = me if name == "Me Myself" else signup(name)
         assert post(client, who, payload(routes, count, time_ms=time_ms)).status_code == 200

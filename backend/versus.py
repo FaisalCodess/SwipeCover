@@ -24,7 +24,7 @@ from game import DIRECTIONS, MAX_RUSH_MAPS, generate_match_map, solves
 
 # What each way of finding an opponent means. Friend matches have no entry: the host picks the length.
 MODES = {"quick": {"seconds": 3 * 60}}
-FRIEND_LENGTHS = (60, 3 * 60, 5 * 60)
+FRIEND_LENGTHS = (60, 3 * 60)
 FRIEND_DEFAULT_SECONDS = 3 * 60
 # Set this to force every match to one length (handy for trying things out).
 MATCH_SECONDS = int(os.environ["MATCH_SECONDS"]) if os.environ.get("MATCH_SECONDS") else None

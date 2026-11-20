@@ -179,6 +179,8 @@ async function getJson(path, signal) {
 export const fetchLeaderboard = (level, signal) => getJson(`/leaderboard/${level}`, signal);
 export const fetchRushLeaderboard = (signal) => getJson('/rush/leaderboard', signal);
 export const fetchStreakLeaderboard = (signal) => getJson('/streak/leaderboard', signal);
+// The signed-in player's own streak, counted by the server the way the streak leaderboard counts it.
+export const fetchMyStreak = (signal) => getJson('/streak/me', signal);
 
 async function postScore(score) {
   let response;

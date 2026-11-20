@@ -199,6 +199,23 @@ class ScoreStore:
                 you = entry(place + 1, standings[place])
         return {"entries": entries, "you": you, "total": len(standings)}
 
+    def player_streak(self, today: str, player_id: str, since: str = "") -> dict:
+        """One player's running streak, counted exactly the way top_streaks counts it."""
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT day FROM scores WHERE player_id = ? UNION SELECT day FROM rush_scores WHERE player_id = ?",
+                (player_id, player_id),
+            ).fetchall()
+        days = {day for (day,) in rows if day >= since}
+        cursor = date.fromisoformat(today)
+        if today not in days:
+            cursor -= timedelta(days=1)
+        streak = 0
+        while cursor.isoformat() in days:
+            streak += 1
+            cursor -= timedelta(days=1)
+        return {"streak": streak, "played_today": today in days}
+
     def _rush_standing(self, day: str, player_id: str) -> dict | None:
         row = self._db.execute(
             "SELECT name, maps, time_ms, moves, submitted_at FROM rush_scores WHERE day = ? AND player_id = ?",

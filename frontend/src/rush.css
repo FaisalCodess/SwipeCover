@@ -23,25 +23,30 @@
 }
 
 .camera-dive {
-  animation: camera-dive 1.7s cubic-bezier(.65, 0, .2, 1) both;
+  animation: camera-dive var(--travel, 1.7s) linear both;
 }
 
 .camera-rise {
-  animation: camera-rise 1.7s .35s cubic-bezier(.65, 0, .2, 1) both;
+  animation: camera-rise var(--travel, 1.7s) var(--travel-delay, .35s) linear both;
 }
 
+/* Same three beats as the climb into the sky (see game-view.css): wind-up, glide, settle. */
 @keyframes camera-dive {
-  from { transform: translateY(0); }
-  to { transform: translateY(-100svh); }
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(.3, 0, .4, 1); }
+  9% { transform: translateY(14px); animation-timing-function: cubic-bezier(.6, 0, .25, 1); }
+  90% { transform: translateY(calc(-100svh - 8px)); animation-timing-function: cubic-bezier(.3, 0, .5, 1); }
+  100% { transform: translateY(-100svh); }
 }
 
 @keyframes camera-rise {
-  from { transform: translateY(-100svh); }
-  to { transform: translateY(0); }
+  0% { transform: translateY(-100svh); animation-timing-function: cubic-bezier(.3, 0, .4, 1); }
+  9% { transform: translateY(calc(-100svh - 12px)); animation-timing-function: cubic-bezier(.6, 0, .25, 1); }
+  90% { transform: translateY(6px); animation-timing-function: cubic-bezier(.3, 0, .5, 1); }
+  100% { transform: translateY(0); }
 }
 
 .shared-brand.is-rise {
-  transition-delay: .35s;
+  transition-delay: var(--travel-delay, .35s);
 }
 
 /* ---------- The cave ---------- */

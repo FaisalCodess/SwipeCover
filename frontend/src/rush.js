@@ -1,4 +1,4 @@
-// Swipe Rush: five minutes, as many boards as you can clear.
+// Swipe Rush: three minutes, as many boards as you can clear.
 //
 // Like the first run of a daily level, a day's first Swipe Rush is the one that counts
 // (the leaderboard keeps only that), so it cannot be re-rolled. Its clock is a deadline
@@ -8,7 +8,7 @@
 // that is still going picks it up where it was. When the deadline passes while the
 // player is away, the run is closed with the boards cleared so far (see `settleRush`).
 
-export const RUSH_MS = 5 * 60 * 1000;
+export const RUSH_MS = 3 * 60 * 1000;
 // A short beat between clearing a board and the next one appearing.
 export const RUSH_ADVANCE_MS = 240;
 // "TIME" stays on screen this long before the results appear.

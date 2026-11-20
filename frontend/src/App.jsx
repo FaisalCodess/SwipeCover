@@ -17,7 +17,7 @@ import BackgroundMusic from './BackgroundMusic.jsx';
 import { CaveBelow, RushBanner, RushHud, useRushPressure } from './Rush.jsx';
 import BoardBall from './BoardBall.jsx';
 import SwipePad from './SwipePad.jsx';
-import { useSwipe } from './swipe.js';
+import { SWIPE_DISTANCE, useSwipe } from './swipe.js';
 import Brand from './Brand.jsx';
 import './brand.css';
 import ResultDialog, { PracticeStrip, ResultButton, ResultStanding, ShareButton } from './ResultDialog.jsx';
@@ -53,6 +53,7 @@ import { startRushPulse } from './rushAudio.js';
 import {
   checkSession,
   fetchDailyBoard,
+  fetchMyStreak,
   flushPendingScores,
   getSession,
   getToken,
@@ -68,12 +69,14 @@ import LegalDialog from './LegalDialog.jsx';
 import VersusLobby from './VersusLobby.jsx';
 import { VersusClient } from './versusClient.js';
 import './versus.css';
+import { beginTrip, trackOrigin } from './uiMotion.jsx';
 
 const STORAGE_KEY = 'swipe-cover-save-v2';
-// Keep in sync with the .camera animations in game-view.css.
-const TRAVEL_MS = 1700;
-const TRAVEL_DOWN_DELAY_MS = 350;
+// How long a trip takes is chosen per trip (see beginTrip in uiMotion.jsx) and shared with the CSS
+// through --travel. The interface starts building in this long before a full-length trip lands.
 const UI_LEAD_MS = 650;
+// Swipe Rush gets a beat of READY once the camera has landed, so GO! has something to break.
+const RUSH_DIVE_READY_MS = 620;
 const LEVELS = 3;
 const KEEP_SCORE_DAYS = 14;
 const MAX_QUEUED_MOVES = 8;
@@ -265,12 +268,61 @@ function PrimaryButton({ children, onClick, disabled = false, className = '', au
 }
 
 // `mapKey` is set in Swipe Rush: each new board is a fresh grid that drops in.
+// How far the board can be pulled along under a finger, and how stiffly it resists.
+const PULL_MAX = 16;
+const PULL_STIFFNESS = 46;
+const pull = (distance) => Math.sign(distance) * PULL_MAX * (1 - Math.exp(-Math.abs(distance) / PULL_STIFFNESS));
+
 function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey, swipeEnabled = true }) {
   const swipe = useSwipe(onMove);
+  const layerRef = useRef(null);
+  const finger = useRef(null);
   const { board, player } = run;
   const rows = board.length;
   const cols = board[0].length;
   const celebrating = phase === 'celebrating' || phase === 'won' || phase === 'advancing';
+  // With only a few squares left they glow, so the eye finds the last ones at once.
+  const lastFew = phase === 'playing' && run.remaining > 0 && run.remaining <= 3;
+
+  // The board gives a little under a finger and follows it, with more resistance the further it is
+  // pulled (a rubber band), then springs back when the swipe fires or the finger lifts.
+  function setPull(x, y) {
+    const layer = layerRef.current;
+    if (!layer) return;
+    layer.style.setProperty('--pull-x', `${x.toFixed(1)}px`);
+    layer.style.setProperty('--pull-y', `${y.toFixed(1)}px`);
+  }
+
+  function letGo() {
+    finger.current = null;
+    layerRef.current?.classList.remove('is-pulled');
+    setPull(0, 0);
+  }
+
+  function handlePointerMove(event) {
+    swipe.move(event);
+    const start = finger.current;
+    if (!start || prefersReducedMotion()) return;
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) >= SWIPE_DISTANCE) {
+      // The swipe has fired: the board springs back, and the next stroke starts from here.
+      start.x = event.clientX;
+      start.y = event.clientY;
+      layerRef.current?.classList.remove('is-pulled');
+      setPull(0, 0);
+      return;
+    }
+    if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 4) return;
+    layerRef.current?.classList.add('is-pulled');
+    if (Math.abs(deltaX) > Math.abs(deltaY)) setPull(pull(deltaX), 0);
+    else setPull(0, pull(deltaY));
+  }
+
+  function handlePointerUp(event) {
+    swipe.end(event);
+    letGo();
+  }
 
   function handlePointerDown(event) {
     // Only a board in play takes swipes, and not when the swipe pad has taken over. Capturing the
@@ -279,6 +331,7 @@ function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey, swipeEnab
     if (!swipeEnabled || phase !== 'playing') return;
     if (event.pointerType === 'mouse' && event.button !== 0) return;
     swipe.start(event);
+    finger.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture?.(event.pointerId);
   }
 
@@ -287,17 +340,17 @@ function GameBoard({ run, anim, bump, phase, onMove, onResume, mapKey, swipeEnab
       className="board-touch game-board-frame"
       data-phase={phase}
       onPointerDown={handlePointerDown}
-      onPointerMove={swipe.move}
-      onPointerUp={swipe.end}
-      onPointerCancel={swipe.end}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       <BoardFrame />
       {/* The ball and its sparks sit beside the grid, not in it: a new Swipe Rush board swaps the
           grid out, and the sparks from clearing the last one carry on over the next. */}
-      <div className="board-layer" style={{ '--rows': rows, '--cols': cols }}>
+      <div ref={layerRef} className="board-layer" style={{ '--rows': rows, '--cols': cols }}>
         <div
           key={mapKey}
-          className={`board-grid ${celebrating ? 'board-won' : ''} ${mapKey === undefined ? '' : 'rush-board-in'}`}
+          className={`board-grid ${celebrating ? 'board-won' : ''} ${lastFew ? 'is-last-few' : ''} ${mapKey === undefined ? '' : 'rush-board-in'}`}
           role="img"
           aria-label={`Game board, ${run.remaining} squares left to cover`}
         >
@@ -399,7 +452,10 @@ function WinDialog({ run, result, firstRun, globalResult, onJoin, onReplay, onNe
       kicker={practice ? `LEVEL ${run.level} · PRACTICE RUN` : `LEVEL ${run.level} OF ${LEVELS}`}
       title={practice ? 'Nicely played' : isLast ? 'Daily run complete' : 'Level cleared'}
       pips={{ total: LEVELS, current: run.level, done: completedLevels }}
-      hero={{ label: 'EVERY SQUARE COVERED IN', value: formatTime(result.time) }}
+      hero={{ label: 'EVERY SQUARE COVERED IN', value: formatTime(result.time), count: { to: result.time, format: formatTime } }}
+      /* Rare moments get the big finish: the whole daily run is the peak, one more level a smaller
+         one, and a practice run none (it is for fun, and there are many). */
+      confetti={practice ? 0 : isLast ? 40 : 14}
       stats={stats}
       standing={practice
         ? <PracticeStrip>ONLY YOUR FIRST RUN OF EACH LEVEL COUNTS</PracticeStrip>
@@ -418,7 +474,7 @@ function WinDialog({ run, result, firstRun, globalResult, onJoin, onReplay, onNe
   );
 }
 
-// What the player gets when the five minutes are up: boards cleared, then either the usual
+// What the player gets when the three minutes are up: boards cleared, then either the usual
 // leaderboard standing (a first run) or a note that a replay is just for fun.
 function RushResults({ result, day, first, globalResult, onJoin, onReplay, onHome, playerName, challenge }) {
   const practice = !result.ranked;
@@ -434,7 +490,7 @@ function RushResults({ result, day, first, globalResult, onJoin, onReplay, onHom
     });
   }
   const shareText = `Swipe Cover · Swipe Rush
-⚡ ${result.maps} ${result.maps === 1 ? 'map' : 'maps'} in 5 minutes
+⚡ ${result.maps} ${result.maps === 1 ? 'map' : 'maps'} in 3 minutes
 Can you beat it?`;
   const shareLink = challengeUrl({ kind: 'rush', value: Math.max(1, result.maps), day, by: playerName });
   return (
@@ -443,7 +499,8 @@ Can you beat it?`;
       titleId="rush-title"
       kicker={practice ? 'SWIPE RUSH · PRACTICE RUN' : "SWIPE RUSH · TIME'S UP"}
       title={rushVerdict(result.maps).replace(/\.$/, '')}
-      hero={{ label: result.maps === 1 ? 'MAP CLEARED' : 'MAPS CLEARED', value: result.maps }}
+      hero={{ label: result.maps === 1 ? 'MAP CLEARED' : 'MAPS CLEARED', value: result.maps, count: { to: result.maps, format: (value) => String(Math.round(value)) } }}
+      confetti={practice || result.maps === 0 ? 0 : Math.min(40, 10 + result.maps * 2)}
       stats={stats}
       standing={practice
         ? <PracticeStrip>ONLY YOUR FIRST SWIPE RUSH OF THE DAY COUNTS</PracticeStrip>
@@ -497,6 +554,7 @@ function VersusResults({ rush, outcome, onAgain, onHome }) {
       kicker={`SWIPE RUSH · 1V1 · ${{ quick: 'QUICK MATCH', friends: 'FRIEND MATCH' }[mode] || ''}`.replace(/ · $/, '')}
       title={verdict}
       hero={{ label: 'YOU · THEM', value: `${you} – ${them}` }}
+      confetti={outcome?.outcome === 'win' ? 36 : 0}
       stats={stats}
       standing={outcome ? null : <p className="result-status" role="status"><LoaderCircle size={14} className="menu-spin" /> CONFIRMING THE FINAL SCORE</p>}
       actions={outcome ? (
@@ -559,6 +617,7 @@ export default function App() {
   const [gameLive, setGameLive] = useState(false);
   const [menuReveal, setMenuReveal] = useState(false);
   const travelRef = useRef(null);
+  const tripPlan = useRef(null);
   const stopwatch = useStopwatch();
 
   // Swipe Rush. `rushInfo` is today's first (ranked) run as the menu shows it; `rush` is the run
@@ -591,7 +650,39 @@ export default function App() {
   leaderboardRef.current = leaderboard;
 
   const todaysScores = leaderboard[dayKey]?.levels || {};
-  const streak = currentStreak(streakState, dayKey);
+  const localStreak = currentStreak(streakState, dayKey);
+  // A signed-in player's streak is the server's, counted from the runs it holds: the same number as
+  // the streak leaderboard. This device's own count is only for guests, or when the server cannot be
+  // reached. `undefined` is "not answered yet" and `false` is "could not be reached".
+  const [serverStreak, setServerStreak] = useState(undefined);
+  // False from the moment a ranked run is sent until the server's count has been read again.
+  const [streakFresh, setStreakFresh] = useState(true);
+  useEffect(() => {
+    if (!player.id) {
+      setServerStreak(undefined);
+      setStreakFresh(true);
+      return undefined;
+    }
+    if (globalResult.status === 'sending') {
+      setStreakFresh(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    fetchMyStreak(controller.signal)
+      .then((data) => {
+        setServerStreak({ streak: data.streak, playedToday: data.played_today });
+        setStreakFresh(true);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setServerStreak(false);
+        setStreakFresh(true);
+      });
+    return () => controller.abort();
+  }, [player.id, screen, dayKey, globalResult.status]);
+  let streak = localStreak;
+  if (player.id) streak = serverStreak === undefined ? null : (serverStreak === false ? localStreak : serverStreak.streak);
+  const streakPlayedToday = player.id && serverStreak ? serverStreak.playedToday : streakState.last === dayKey;
   const completedLevels = LEVEL_NUMBERS.filter((level) => todaysScores[level]?.length > 0);
 
   // True once a level's first run has been finished that day. Every run after that is practice.
@@ -683,6 +774,24 @@ export default function App() {
     scheduleDailyReset();
     return () => window.clearTimeout(timer);
   }, []);
+
+  // Remembers what was pressed last, so a dialog can grow out of it.
+  useEffect(() => trackOrigin(), []);
+
+  // While the camera is travelling, a tap or a key press speeds it up.
+  useEffect(() => {
+    if (!travel) return undefined;
+    const skip = (event) => {
+      if (event.type === 'keydown' && (event.repeat || event.ctrlKey || event.metaKey || event.altKey)) return;
+      tripPlan.current?.fastForward();
+    };
+    window.addEventListener('pointerdown', skip);
+    window.addEventListener('keydown', skip);
+    return () => {
+      window.removeEventListener('pointerdown', skip);
+      window.removeEventListener('keydown', skip);
+    };
+  }, [travel]);
 
   // Browsers only allow audio after a user gesture.
   useEffect(() => {
@@ -815,6 +924,35 @@ export default function App() {
     window.scrollTo({ top: 0 });
   }, [changePhase, clearPending, commitRun, hasFirstRun, startClock, stopwatch]);
 
+  // Plays the steps of a trip between the menu and a game (`at` is milliseconds from its start).
+  // A tap or a key press partway through fast-forwards the rest (see the effect below), so a trip
+  // never makes anyone wait: motion that can be interrupted does not get in the way.
+  const playTrip = useCallback((steps) => {
+    const plan = { start: performance.now(), base: 0, since: performance.now(), rate: 1, steps: steps.map((step) => ({ ...step, done: false })), timers: [] };
+    const now = () => plan.base + (performance.now() - plan.since) * plan.rate;
+    plan.arm = () => {
+      plan.timers.forEach((timer) => window.clearTimeout(timer));
+      plan.timers = plan.steps.filter((step) => !step.done).map((step) => window.setTimeout(() => {
+        step.done = true;
+        step.run();
+        if (plan.steps.every((entry) => entry.done) && tripPlan.current === plan) tripPlan.current = null;
+      }, Math.max(0, (step.at - now()) / plan.rate)));
+    };
+    plan.fastForward = () => {
+      if (plan.rate > 1 || performance.now() - plan.start < 250) return;
+      plan.base = now();
+      plan.since = performance.now();
+      plan.rate = 4;
+      // The camera and the logo are CSS animations and transitions; the looping ones are left alone.
+      document.getAnimations().forEach((animation) => {
+        if (animation.effect?.getTiming().iterations !== Infinity) animation.updatePlaybackRate(4);
+      });
+      plan.arm();
+    };
+    tripPlan.current = plan;
+    plan.arm();
+  }, []);
+
   // Menu -> game: the camera pans up from the menu into the sky above it, then the
   // game builds itself in and the clock starts.
   const travelUp = useCallback((data) => {
@@ -823,19 +961,25 @@ export default function App() {
       startRun(data);
       return;
     }
+    const trip = beginTrip();
     travelRef.current = 'up';
     setGameLive(false);
     startRun(data, { deferred: true });
     setTravel('up');
-    window.setTimeout(() => setGameLive(true), TRAVEL_MS - UI_LEAD_MS);
-    window.setTimeout(() => {
-      startClock();
-      screenRef.current = 'game';
-      setScreen('game');
-      setTravel(null);
-      travelRef.current = null;
-    }, TRAVEL_MS);
-  }, [startClock, startRun]);
+    playTrip([
+      { at: trip.ms - UI_LEAD_MS * trip.scale, run: () => setGameLive(true) },
+      {
+        at: trip.ms,
+        run: () => {
+          startClock();
+          screenRef.current = 'game';
+          setScreen('game');
+          setTravel(null);
+          travelRef.current = null;
+        },
+      },
+    ]);
+  }, [playTrip, startClock, startRun]);
 
   // Levels open in order: the ones before it must be cleared first. A cleared level can always be replayed.
   const startLevel = useCallback((level) => {
@@ -1077,18 +1221,30 @@ export default function App() {
       window.scrollTo({ top: 0 });
       return;
     }
+    const trip = beginTrip();
     travelRef.current = 'dive';
     setGameLive(false);
     setTravel('dive');
-    window.setTimeout(() => setGameLive(true), TRAVEL_MS - UI_LEAD_MS);
-    window.setTimeout(() => {
-      landRush();
-      screenRef.current = 'rush';
-      setScreen('rush');
-      setTravel(null);
-      travelRef.current = null;
-    }, TRAVEL_MS);
-  }, [changePhase, commitRush, landRush, loadRushBoard, sfx]);
+    playTrip([
+      { at: trip.ms - UI_LEAD_MS * trip.scale, run: () => setGameLive(true) },
+      {
+        at: trip.ms,
+        run: () => {
+          screenRef.current = 'rush';
+          setScreen('rush');
+          setTravel(null);
+          travelRef.current = null;
+          if (attempt) {
+            landRush();
+          } else {
+            // A new run holds its breath for a moment: READY, then GO! as the clock starts.
+            showBanner('ready');
+            later(() => landRush(), RUSH_DIVE_READY_MS);
+          }
+        },
+      },
+    ]);
+  }, [changePhase, commitRush, landRush, later, loadRushBoard, playTrip, sfx, showBanner]);
 
   // "Play again" after a Swipe Rush: a fresh run in place (it is practice now), after a beat to get ready.
   const restartRush = useCallback(() => {
@@ -1173,18 +1329,24 @@ export default function App() {
       window.scrollTo({ top: 0 });
       return;
     }
+    const trip = beginTrip();
     travelRef.current = 'dive';
     setGameLive(false);
     setTravel('dive');
-    window.setTimeout(() => setGameLive(true), TRAVEL_MS - UI_LEAD_MS);
-    window.setTimeout(() => {
-      awaitStart();
-      screenRef.current = 'rush';
-      setScreen('rush');
-      setTravel(null);
-      travelRef.current = null;
-    }, TRAVEL_MS);
-  }, [changePhase, commitRush, landRush, later, loadRushBoard, sfx, showBanner]);
+    playTrip([
+      { at: trip.ms - UI_LEAD_MS * trip.scale, run: () => setGameLive(true) },
+      {
+        at: trip.ms,
+        run: () => {
+          awaitStart();
+          screenRef.current = 'rush';
+          setScreen('rush');
+          setTravel(null);
+          travelRef.current = null;
+        },
+      },
+    ]);
+  }, [changePhase, commitRush, landRush, later, loadRushBoard, playTrip, sfx, showBanner]);
 
   const handleVersusMessage = useCallback((message) => {
     switch (message.type) {
@@ -1341,7 +1503,6 @@ export default function App() {
       if (!next) {
         setBump((previous) => ({ id: (previous?.id ?? 0) + 1, direction }));
         sfx('blocked');
-        vibrate(12);
         continue;
       }
 
@@ -1460,17 +1621,23 @@ export default function App() {
       return;
     }
     const direction = screenRef.current === 'rush' ? 'rise' : 'down';
+    const trip = beginTrip();
     travelRef.current = direction;
     setGameLive(false);
     setMenuReveal(false);
     setTravel(direction);
-    window.setTimeout(() => setMenuReveal(true), TRAVEL_DOWN_DELAY_MS + TRAVEL_MS * 0.55);
-    window.setTimeout(() => {
-      returnHome();
-      setTravel(null);
-      travelRef.current = null;
-    }, TRAVEL_DOWN_DELAY_MS + TRAVEL_MS);
-  }, [returnHome]);
+    playTrip([
+      { at: trip.delay + trip.ms * 0.55, run: () => setMenuReveal(true) },
+      {
+        at: trip.delay + trip.ms,
+        run: () => {
+          returnHome();
+          setTravel(null);
+          travelRef.current = null;
+        },
+      },
+    ]);
+  }, [playTrip, returnHome]);
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -1643,8 +1810,8 @@ export default function App() {
             />
 
             <div className="game-statusbar">
-              <span className="game-status-dots"><i /> {run.remaining} {run.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
-              <span className="tabular-nums shrink-0 whitespace-nowrap">{run.moves} {run.moves === 1 ? 'MOVE' : 'MOVES'}</span>
+              <span className="game-status-dots"><i className={run.remaining <= 3 ? 'is-low' : ''} /> <b key={run.remaining} className="count-tick">{run.remaining}</b> {run.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
+              <span className="tabular-nums shrink-0 whitespace-nowrap"><b key={run.moves} className="count-tick">{run.moves}</b> {run.moves === 1 ? 'MOVE' : 'MOVES'}</span>
             </div>
 
             <div className="game-actions">
@@ -1676,7 +1843,7 @@ export default function App() {
           completedLevels={completedLevels}
           rush={rushInfo}
           streak={streak}
-          streakToday={streakState.last === dayKey}
+          streakToday={streakPlayedToday}
           challenge={challenge?.day === dayKey ? challenge : null}
           onDismissChallenge={() => { clearChallenge(); setChallenge(null); }}
           status={daily.status}
@@ -1733,8 +1900,8 @@ export default function App() {
             />
 
             <div className="game-statusbar">
-              <span className="game-status-dots"><i /> {rushRun.remaining} {rushRun.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
-              <span className="tabular-nums shrink-0 whitespace-nowrap">{rushRun.moves} {rushRun.moves === 1 ? 'MOVE' : 'MOVES'}</span>
+              <span className="game-status-dots"><i className={rushRun.remaining <= 3 ? 'is-low' : ''} /> <b key={rushRun.remaining} className="count-tick">{rushRun.remaining}</b> {rushRun.remaining === 1 ? 'SQUARE' : 'SQUARES'} LEFT</span>
+              <span className="tabular-nums shrink-0 whitespace-nowrap"><b key={rushRun.moves} className="count-tick">{rushRun.moves}</b> {rushRun.moves === 1 ? 'MOVE' : 'MOVES'}</span>
             </div>
 
             {/* No pause: the clock cannot stop. Restart costs time like everything else. */}
@@ -1770,7 +1937,7 @@ export default function App() {
           onHome={goHome}
           completedLevels={completedLevels}
           playerName={player.name}
-          streak={streak}
+          streak={player.id && !streakFresh ? 0 : (streak ?? 0)}
           challenge={challenge}
         />
       )}

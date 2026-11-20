@@ -578,6 +578,15 @@ def streak_leaderboard(response: Response, user: dict | None = Depends(optional_
     return store.top_streaks(current_day_key(), user["id"] if user else None, STREAK_START)
 
 
+@app.get("/api/streak/me")
+def my_streak(response: Response, user: dict | None = Depends(optional_user)) -> dict:
+    """The caller's own streak, worked out the same way as the streak leaderboard (a guest has none)."""
+    response.headers["Cache-Control"] = "no-store"
+    if user is None:
+        return {"streak": 0, "played_today": False}
+    return store.player_streak(current_day_key(), user["id"], STREAK_START)
+
+
 def _origin_allowed(websocket: WebSocket) -> bool:
     """Browsers always send Origin on a WebSocket. Accept our own site and the configured origins."""
     origin = websocket.headers.get("origin")

@@ -37,7 +37,7 @@
   background: none;
   color: inherit;
   cursor: pointer;
-  transition: top 1.7s cubic-bezier(.65, 0, .2, 1), left 1.7s cubic-bezier(.65, 0, .2, 1);
+  transition: top var(--travel, 1.7s) cubic-bezier(.65, 0, .2, 1), left var(--travel, 1.7s) cubic-bezier(.4, 0, .12, 1);
 }
 
 .shared-brand.to-game {
@@ -46,7 +46,7 @@
 }
 
 .shared-brand.is-down {
-  transition-delay: .35s;
+  transition-delay: var(--travel-delay, .35s);
 }
 
 .shared-brand:disabled {
@@ -156,7 +156,7 @@
   background: none;
   color: inherit;
   cursor: pointer;
-  transition: top 1.7s cubic-bezier(.65, 0, .2, 1), left 1.7s cubic-bezier(.65, 0, .2, 1);
+  transition: top var(--travel, 1.7s) cubic-bezier(.65, 0, .2, 1), left var(--travel, 1.7s) cubic-bezier(.4, 0, .12, 1);
 }
 
 .shared-brand.to-game {
@@ -165,7 +165,7 @@
 }
 
 .shared-brand.is-down {
-  transition-delay: .35s;
+  transition-delay: var(--travel-delay, .35s);
 }
 
 .shared-brand:disabled {
@@ -556,21 +556,28 @@
 }
 
 .camera-up {
-  animation: camera-up 1.7s cubic-bezier(.65, 0, .2, 1) both;
+  animation: camera-up var(--travel, 1.7s) linear both;
 }
 
 .camera-down {
-  animation: camera-down 1.7s .35s cubic-bezier(.65, 0, .2, 1) both;
+  animation: camera-down var(--travel, 1.7s) var(--travel-delay, .35s) linear both;
 }
 
+/* A trip has three beats: a short wind-up the opposite way (anticipation), a long glide that starts
+   and ends slowly, and a small overshoot that settles back (follow-through). Each stretch has its
+   own easing. The overshoot is a few pixels past the end, so nothing but the dark page shows. */
 @keyframes camera-up {
-  from { transform: translateY(-100svh); }
-  to { transform: translateY(0); }
+  0% { transform: translateY(-100svh); animation-timing-function: cubic-bezier(.3, 0, .4, 1); }
+  9% { transform: translateY(calc(-100svh - 14px)); animation-timing-function: cubic-bezier(.6, 0, .25, 1); }
+  90% { transform: translateY(6px); animation-timing-function: cubic-bezier(.3, 0, .5, 1); }
+  100% { transform: translateY(0); }
 }
 
 @keyframes camera-down {
-  from { transform: translateY(0); }
-  to { transform: translateY(-100svh); }
+  0% { transform: translateY(0); animation-timing-function: cubic-bezier(.3, 0, .4, 1); }
+  9% { transform: translateY(12px); animation-timing-function: cubic-bezier(.6, 0, .25, 1); }
+  90% { transform: translateY(calc(-100svh - 6px)); animation-timing-function: cubic-bezier(.3, 0, .5, 1); }
+  100% { transform: translateY(-100svh); }
 }
 
 /* The menu's own content gets out of the way as the camera starts to rise. */

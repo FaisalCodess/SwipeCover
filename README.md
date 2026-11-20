@@ -2,7 +2,7 @@
 
 Swipe Cover is a daily sliding puzzle. Three new boards every day, the same for
 every player. The ball slides until a wall or the edge stops it; cover every dot
-to clear the level. **Swipe Rush** is the fast mode: five minutes, as many small
+to clear the level. **Swipe Rush** is the fast mode: three minutes, as many small
 boards as you can clear, played in a cave below the menu.
 
 - **Frontend:** React, Vite, Tailwind CSS. Moves run locally, so play is instant.
@@ -130,7 +130,7 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
 ## Swipe Rush
 
 - **SWIPE RUSH** on the menu: the camera falls out of the menu, through the earth
-  and into a cave, and a five minute countdown starts. Clear a board and the next
+  and into a cave, and a three minute countdown starts. Clear a board and the next
   appears at once; the score is how many boards you clear before time runs out.
 - Everyone gets the same endless sequence each day, in the same order, and it
   resets at midnight (Jordan time) like the daily levels. Boards start tiny
@@ -216,7 +216,7 @@ and start the server with `ALLOWED_ORIGINS=https://your-site.example.com`.
 
 - **1 V 1 RUSH** on the menu (login needed) has two ways to play:
   - **Quick match**: 3 minutes against the next player searching.
-  - **Friend match**: the host picks 1, 3 or 5 minutes and gets a 5-letter code to send; the
+  - **Friend match**: the host picks 1 or 3 minutes and gets a 5-letter code to send; the
     friend enters it under "Have a code?".
 - Both players fall into the cave together, get a 3-2-1, and race on the **same boards**. Whoever clears more wins; on a tie, whoever cleared their last board sooner; nothing
   cleared by either is a draw. Every match uses a fresh random seed, so unlike the daily

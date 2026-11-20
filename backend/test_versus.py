@@ -70,7 +70,7 @@ def test_a_quick_match_lasts_three_minutes(client, signup, monkeypatch):
 
 def test_friends_choose_how_long_to_play(client, signup, monkeypatch):
     monkeypatch.setattr(versus, "MATCH_SECONDS", None)
-    for number, (asked, expected) in enumerate(((60, 60), (300, 300), (None, 180), (7, 180), ("60", 180))):
+    for number, (asked, expected) in enumerate(((60, 60), (180, 180), (300, 180), (None, 180), (7, 180), ("60", 180))):
         alice, bobby = signup(f"Alice {number}"), signup(f"Bobby {number}")
         with connect(client, alice) as a, connect(client, bobby) as b:
             a.send_json({"type": "create", **({} if asked is None else {"seconds": asked})})

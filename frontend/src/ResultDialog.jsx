@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Check, LoaderCircle, LogIn, Share2, TriangleAlert, WifiOff } from 'lucide-react';
 import { BoardFrame, CutFrame, keyShape } from './MainMenu.jsx';
 import { shareResult } from './share.js';
+import { Confetti, CountUp, useDialogOrigin } from './uiMotion.jsx';
 import './result.css';
 
 // A button in the game's cut-corner style (same shape as the MENU / UNDO chips).
@@ -80,10 +81,14 @@ export function PracticeStrip({ children }) {
 
 // The panel that comes up when a level or a Swipe Rush ends. `tone` is 'level' (teal) or 'rush' (ember).
 // `hero` is the big number, `stats` the small cells under it, `pips` the daily-level progress (levels only).
-export default function ResultDialog({ tone = 'level', titleId, kicker, title, hero, stats = [], pips, standing, actions, hint }) {
+export default function ResultDialog({ tone = 'level', titleId, kicker, title, hero, stats = [], pips, standing, actions, hint, confetti = 0 }) {
+  const panel = useRef(null);
+  useDialogOrigin(panel);
   return (
     <div className="result-overlay fade-in">
-      <section className={`result-panel pop-in is-${tone}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      {/* The finish a run deserves: the bigger the moment, the more pieces. */}
+      <Confetti count={confetti} tone={tone} />
+      <section ref={panel} className={`result-panel pop-in is-${tone}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <BoardFrame />
         <div className="result-body">
           <p className="result-kicker result-item" style={{ '--i': 0 }}>{kicker}</p>
@@ -100,7 +105,9 @@ export default function ResultDialog({ tone = 'level', titleId, kicker, title, h
 
           <div className="result-hero result-item" style={{ '--i': 3 }}>
             <small>{hero.label}</small>
-            <strong className="tabular-nums">{hero.value}</strong>
+            <strong className="tabular-nums">
+              {hero.count ? <CountUp to={hero.count.to} format={hero.count.format} /> : hero.value}
+            </strong>
           </div>
 
           <dl className="result-stats result-item" style={{ '--i': 4 }}>

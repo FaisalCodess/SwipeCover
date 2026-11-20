@@ -484,11 +484,11 @@ function Toggle({ label, checked, onChange }) {
 
 // Shared shell for the panels that unfold out of the main menu (Settings and Leaderboard),
 // so both always look and animate the same way.
-const MenuPanel = forwardRef(function MenuPanel({ id, title, closing, onClose, children }, ref) {
+const MenuPanel = forwardRef(function MenuPanel({ id, title, closing, resumed, onClose, children }, ref) {
   return (
     <aside
       ref={ref}
-      className={`menu-panel ${closing ? 'is-closing' : ''}`}
+      className={`menu-panel ${closing ? 'is-closing' : ''} ${resumed ? 'is-resumed' : ''}`}
       role="dialog"
       aria-modal="false"
       aria-labelledby={`menu-${id}-title`}
@@ -599,7 +599,7 @@ const BOARD_SECTIONS = [
 ];
 
 const BOARD_NOTES = {
-  rush: { left: 'SWIPE RUSH · 5 MIN · MOST MAPS', right: 'TODAY' },
+  rush: { left: 'SWIPE RUSH · 3 MIN · MOST MAPS', right: 'TODAY' },
   streak: { left: 'DAYS IN A ROW · TOP 100', right: 'LIVE' },
 };
 
@@ -784,17 +784,21 @@ function LeaderboardContent({ levelScores, player, rush, start = 'daily' }) {
             )}
           </div>
         )}
-        {!entries.length && (
+        {!entries.length && (board?.status === 'ready' || board?.status === 'offline') && (
           <div className="menu-board-empty">
-            {board?.status === 'ready' || board?.status === 'offline' ? (
-              <>
-                <span>{emptyTitle}</span>
-                <p>{emptyText}</p>
-              </>
-            ) : (
-              <span className="menu-board-loading"><LoaderCircle className="menu-spin" size={15} /> LOADING</span>
-            )}
+            <span>{emptyTitle}</span>
+            <p>{emptyText}</p>
           </div>
+        )}
+        {/* While the answer is on its way the list already has its shape, so the panel responds at
+            once and the wait reads as progress, not as nothing happening. */}
+        {!entries.length && !(board?.status === 'ready' || board?.status === 'offline') && (
+          <>
+            <ol className="menu-board-skeleton" aria-hidden="true">
+              {Array.from({ length: 9 }, (_, index) => <li key={index} style={{ '--k': index }}><i /><b /><u /></li>)}
+            </ol>
+            <span className="sr-only" role="status">Loading</span>
+          </>
         )}
       </div>
 
@@ -900,7 +904,7 @@ function LevelOrbs({ cleared, firstRuns, disabled, onPlay, onRefuse }) {
           if (state === 'cleared') label = `Level ${level}, cleared. Replay it for fun`;
           if (state === 'locked') label = `Level ${level}, locked. Clear level ${blockerOf(level, cleared)} first`;
           return (
-            <span key={level} className="menu-orb-position" style={{ '--orb-angle': `${index * 120}deg` }}>
+            <span key={level} className="menu-orb-position" style={{ '--orb-angle': `${index * 120}deg`, '--n': index }}>
               <button
                 type="button"
                 className={`menu-level-button is-${state} ${level === nextLevel ? 'is-next' : ''} ${refusal?.blocker === level ? 'is-hinted' : ''}`}
@@ -948,27 +952,27 @@ function LevelOrbs({ cleared, firstRuns, disabled, onPlay, onRefuse }) {
 const PHONE_RING_TOP = 72;
 
 // The day streak: a flame that burns hotter the longer the streak (ember, then gold, then the game's
-// own teal at a month), a row of seven pips for the week (a streak of 10 lights three of the next
-// week), and a pulsing pip for today while today's run is still to play.
+// own teal at a month), with a note under it while today's run is still to play.
 const flameTier = (streak) => (streak >= 30 ? 3 : streak >= 7 ? 2 : streak >= 3 ? 1 : 0);
 
-function streakShape(width, height) {
-  const right = width - HALF;
-  const bottom = height - HALF;
-  return [[HALF, 12], [12, HALF], [right - 22, HALF], [right, 22], [right, bottom - 12], [right - 12, bottom], [24, bottom], [HALF, bottom - 24]];
-}
+// The streak the menu showed last. Coming back to the menu with a longer one plays the flare, so the
+// end of a session finishes on the streak growing.
+let shownStreak = null;
 
 function StreakChip({ streak, playedToday, onOpen }) {
-  const lit = ((streak - 1) % 7) + 1;
+  // Growing since the menu last showed a number: the flare plays and a "+N" floats up.
+  const [grew, setGrew] = useState(0);
+  useEffect(() => {
+    if (shownStreak !== null && streak > shownStreak) setGrew(streak - shownStreak);
+  }, [streak]);
   return (
     <button
       type="button"
-      className="menu-streak"
+      className={`menu-streak ${grew ? 'is-growing' : ''} ${playedToday ? '' : 'is-at-risk'}`}
       data-tier={flameTier(streak)}
       onClick={onOpen}
       aria-label={`${streak} day streak${playedToday ? '' : ', play today to keep it'}. Open the streak leaderboard`}
     >
-      <CutFrame shape={streakShape} />
       <svg className="menu-streak-flame" viewBox="0 0 32 40" aria-hidden="true">
         <defs>
           <linearGradient id="streak-outer" x1="0" x2="0" y1="1" y2="0">
@@ -982,14 +986,9 @@ function StreakChip({ streak, playedToday, onOpen }) {
       <span className="menu-streak-count">
         <strong>{streak}</strong>
         <small>DAY STREAK</small>
+        {grew > 0 && <em className="menu-streak-plus" aria-hidden="true">+{grew}</em>}
       </span>
-      <ArrowUpRight className="menu-streak-open" size={14} strokeWidth={1.6} aria-hidden="true" />
-      <span className="menu-streak-pips" aria-hidden="true">
-        {Array.from({ length: 7 }, (_, index) => (
-          <i key={index} className={index < lit ? 'is-lit' : !playedToday && index === lit ? 'is-today' : ''} />
-        ))}
-      </span>
-      <span className="menu-streak-note">{playedToday ? 'KEPT FOR TODAY' : 'PLAY TODAY TO KEEP IT'}</span>
+      {!playedToday && <span className="menu-streak-note">PLAY TODAY TO KEEP IT</span>}
     </button>
   );
 }
@@ -1003,7 +1002,7 @@ function rushNote(rush, now) {
     const { maps } = rush.result;
     return maps > 0 ? `FIRST RUN · ${maps} ${maps === 1 ? 'MAP' : 'MAPS'}` : 'FIRST RUN · NO MAPS';
   }
-  return '5 MIN · FIRST RUN COUNTS';
+  return '3 MIN · FIRST RUN COUNTS';
 }
 
 // Top-right of the menu: LOG IN when nobody is logged in, otherwise the player's name with a small menu.
@@ -1062,6 +1061,8 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
   // Which panel is showing ('settings' | 'leaderboard'), and whether it is folding away.
   const [panel, setPanel] = useState(null);
   const [panelClosing, setPanelClosing] = useState(false);
+  // True when a panel that was folding away was called back: it opens again from where it had got to.
+  const [panelResumed, setPanelResumed] = useState(false);
   // Which leaderboard tab opens first: the streak chip on the menu opens it on STREAK.
   const [boardStart, setBoardStart] = useState('daily');
   const panelTimer = useRef(null);
@@ -1082,6 +1083,11 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
   }, [allCleared]);
 
   // A Swipe Rush left running keeps counting while the player is in the menu, so show how long is left.
+  // Remembered for the next time the menu is shown (see StreakChip): it is not on screen while a game is.
+  useEffect(() => {
+    if (streak !== null) shownStreak = streak;
+  }, [streak]);
+
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (rush.status !== 'running') return undefined;
@@ -1153,6 +1159,8 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
 
   function closePanel({ restoreFocus = false } = {}) {
     if (!panel || panelClosing) return;
+    setPanelResumed(false);
+    panelRef.current?.style.removeProperty('--resume-delay');
     if (restoreFocus && panelRef.current?.contains(document.activeElement)) {
       panelButtonRef.current?.focus({ preventScroll: true });
     }
@@ -1172,12 +1180,21 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
         closePanel();
         return;
       }
+      // Changed its mind halfway through closing: the panel opens again from where it had got to,
+      // instead of jumping back to the start of the animation.
       window.clearTimeout(panelTimer.current);
       queuedPanel.current = null;
+      const element = panelRef.current;
+      const fold = element?.getAnimations?.().find((animation) => animation.animationName === 'settings-fold' || animation.animationName === 'sheet-out');
+      const progress = Math.min(1, Math.max(0, fold?.effect?.getComputedTiming().progress ?? 0));
+      const openMs = window.matchMedia('(max-width: 760px)').matches ? 320 : 500;
+      element?.style.setProperty('--resume-delay', `${-Math.round((1 - progress) * openMs)}ms`);
+      setPanelResumed(true);
       setPanelClosing(false);
       return;
     }
     if (!panel) {
+      setPanelResumed(false);
       setPanel(id);
       return;
     }
@@ -1321,7 +1338,7 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
           <div className="menu-orbit menu-orbit-one" aria-hidden="true" />
           <div className="menu-orbit menu-orbit-two" aria-hidden="true" />
           <nav ref={navRef}>
-            {MENU_ITEMS.map(({ id, label, icon: Icon }) => {
+            {MENU_ITEMS.map(({ id, label, icon: Icon }, index) => {
               const isPlay = id === 'play';
               const isRush = id === 'rush' || id === 'versus';
               let icon = <Icon size={17} strokeWidth={1.35} />;
@@ -1332,7 +1349,8 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
                   key={id}
                   ref={id === 'settings' ? settingsButtonRef : id === 'leaderboard' ? leaderboardButtonRef : undefined}
                   onClick={() => handleAction(id)}
-                  className={`menu-nav-item ${isPlay && !connecting && !openPanel ? 'is-primary' : ''} ${isPlay && connecting ? 'is-locked' : ''} ${isRush ? 'is-rush' : ''} ${openPanel === id ? 'is-selected' : ''}`}
+                  style={{ '--n': index }}
+                  className={`menu-nav-item ${isPlay && !connecting && !openPanel ? 'is-primary' : ''} ${isPlay ? 'is-play' : ''} ${isPlay && connecting ? 'is-locked' : ''} ${isRush ? 'is-rush' : ''} ${id === 'rush' && rush.status === 'running' ? 'is-resume' : ''} ${id === 'settings' || id === 'leaderboard' ? 'is-utility' : ''} ${id === 'settings' ? 'is-group-start' : ''} ${openPanel === id ? 'is-selected' : ''}`}
                   disabled={isPlay && connecting}
                   aria-expanded={isPlay || isRush ? undefined : openPanel === id}
                 >
@@ -1433,6 +1451,7 @@ export default function MainMenu({ onPlay, onRush, onVersus, onLogin, onLogout, 
               id={panel}
               title={PANEL_TITLES[panel]}
               closing={panelClosing}
+              resumed={panelResumed}
               onClose={() => closePanel({ restoreFocus: true })}
             >
               {panel === 'settings'

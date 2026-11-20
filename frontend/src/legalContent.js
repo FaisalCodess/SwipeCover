@@ -204,7 +204,7 @@ export const LEGAL = {
         blocks: [
           [
             'In a 1v1, the player who clears more maps before time runs out wins. A tie is broken by whoever cleared their last map first, and 0 to 0 is a draw.',
-            'There are three ways to play: Quick match (3 minutes, anyone online, no rating), Ranked (5 minutes, against a player with a close rating) and Friend match (a code you share, lasting 1, 3 or 5 minutes, no rating).',
+            'There are three ways to play: Quick match (3 minutes, anyone online, no rating), Ranked (5 minutes, against a player with a close rating) and Friend match (a code you share, lasting 1 or 3 minutes, no rating).',
             'Only Ranked matches move your rating. Ranked matchmaking looks for a close rating first and widens its search the longer you wait.',
             'If you disconnect, the match keeps going and you can rejoin while it lasts.',
             'Ratings are a game mechanic, not a promise. We may adjust or reset them if the system changes or if cheating is found.',

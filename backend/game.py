@@ -300,7 +300,7 @@ def generate_map(level: int, day: str | None = None) -> tuple[Board, Position]:
 # `steps` is the length of the random solution walk a board is built around, so the
 # shortest solution is about that many moves; the table is the difficulty dial.
 # Mirrored exactly in frontend/src/generator.js (RUSH_TIERS there).
-RUSH_SECONDS = 300
+RUSH_SECONDS = 180
 # No run gets anywhere near this many boards; it just bounds what the server will replay.
 MAX_RUSH_MAPS = 150
 RUSH_ATTEMPTS = 400

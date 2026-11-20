@@ -2,6 +2,8 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 import './index.css';
+// Last, so the motion system can refine everything above it.
+import './motion-system.css';
 
 // Shows a recovery screen instead of a blank page if something unexpected breaks.
 class ErrorBoundary extends React.Component {

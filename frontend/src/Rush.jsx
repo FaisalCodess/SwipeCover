@@ -253,8 +253,40 @@ export function useRushPressure(endsAt, active, onTick) {
 
 // ---------- The screen's furniture ----------
 
+// A "+1" leaves the board and flies up to the score along an arc when a map is cleared. The sideways
+// and the upward parts of the flight run on different curves, which is what bends the path.
+function flyToScore(score) {
+  const board = document.querySelector('.rush-view .game-board-frame');
+  if (!score || !board) return;
+  const from = board.getBoundingClientRect();
+  const to = score.getBoundingClientRect();
+  const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+  const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+  const fly = document.createElement('span');
+  fly.className = 'rush-fly';
+  fly.textContent = '+1';
+  fly.setAttribute('aria-hidden', 'true');
+  score.appendChild(fly);
+  const time = 420;
+  fly.animate([{ translate: `${dx}px 0px` }, { translate: '0px 0px' }], { duration: time, easing: 'cubic-bezier(.45,0,.55,1)', fill: 'both' });
+  const rise = fly.animate([
+    { transform: `translateY(${dy}px) scale(1.7)`, opacity: 0 },
+    { transform: `translateY(${dy * 0.7}px) scale(1.7)`, opacity: 1, offset: 0.12 },
+    { transform: `translateY(${dy * 0.1 - 22}px) scale(1.15)`, offset: 0.62 },
+    { transform: 'translateY(0) scale(.6)', opacity: 0.2 },
+  ], { duration: time, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'both' });
+  rise.onfinish = () => fly.remove();
+}
+
 // `versus` ({ opponent, you, them }) turns it into a 1v1 scoreboard.
 export function RushHud({ solved, endsAt, ranked, versus = null, totalMs = RUSH_MS, children }) {
+  const scoreRef = useRef(null);
+  const lastSolved = useRef(solved);
+  useEffect(() => {
+    const gained = solved > lastSolved.current;
+    lastSolved.current = solved;
+    if (gained && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) flyToScore(scoreRef.current);
+  }, [solved]);
   return (
     <>
       <div className="game-hud rush-hud">
@@ -273,7 +305,7 @@ export function RushHud({ solved, endsAt, ranked, versus = null, totalMs = RUSH_
               <em>{versus.opponent.toUpperCase()}</em>
             </span>
           ) : (
-            <span className="rush-score" role="status" aria-label={`${solved} ${solved === 1 ? 'map' : 'maps'} cleared`}>
+            <span ref={scoreRef} className="rush-score" role="status" aria-label={`${solved} ${solved === 1 ? 'map' : 'maps'} cleared`}>
               <b key={solved}>{solved}</b>
               <small>{solved === 1 ? 'MAP' : 'MAPS'}</small>
             </span>
